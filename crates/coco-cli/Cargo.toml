@@ -1,0 +1,9 @@
+[package]
+name = "coco-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI for COCO dataset evaluation"
+
+[dependencies]
+coco-rs = { path = "../coco-rs" }
+clap = { version = "4", features = ["derive"] }

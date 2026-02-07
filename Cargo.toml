@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/coco-rs", "crates/coco-cli"]
+resolver = "2"

@@ -1,0 +1,451 @@
+//! COCO dataset loading and querying API.
+//!
+//! Faithful port of `pycocotools/coco.py`.
+
+use std::collections::HashMap;
+use std::path::Path;
+
+use crate::mask;
+use crate::types::{Annotation, Category, Dataset, Image, Rle, Segmentation};
+
+/// The COCO dataset API for loading, querying, and indexing annotations.
+pub struct COCO {
+    pub dataset: Dataset,
+    /// ann_id -> index into dataset.annotations
+    anns: HashMap<u64, usize>,
+    /// img_id -> index into dataset.images
+    imgs: HashMap<u64, usize>,
+    /// cat_id -> index into dataset.categories
+    cats: HashMap<u64, usize>,
+    /// img_id -> [ann_id, ...]
+    img_to_anns: HashMap<u64, Vec<u64>>,
+    /// cat_id -> [img_id, ...] (unique)
+    cat_to_imgs: HashMap<u64, Vec<u64>>,
+}
+
+impl COCO {
+    /// Load a COCO annotation JSON file and build indices.
+    pub fn new(annotation_file: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = std::fs::File::open(annotation_file)?;
+        let reader = std::io::BufReader::new(file);
+        let dataset: Dataset = serde_json::from_reader(reader)?;
+        let mut coco = COCO {
+            dataset,
+            anns: HashMap::new(),
+            imgs: HashMap::new(),
+            cats: HashMap::new(),
+            img_to_anns: HashMap::new(),
+            cat_to_imgs: HashMap::new(),
+        };
+        coco.create_index();
+        Ok(coco)
+    }
+
+    /// Build a COCO object from an already-loaded Dataset.
+    pub fn from_dataset(dataset: Dataset) -> Self {
+        let mut coco = COCO {
+            dataset,
+            anns: HashMap::new(),
+            imgs: HashMap::new(),
+            cats: HashMap::new(),
+            img_to_anns: HashMap::new(),
+            cat_to_imgs: HashMap::new(),
+        };
+        coco.create_index();
+        coco
+    }
+
+    /// Build internal index structures from the dataset.
+    fn create_index(&mut self) {
+        self.anns.clear();
+        self.imgs.clear();
+        self.cats.clear();
+        self.img_to_anns.clear();
+        self.cat_to_imgs.clear();
+
+        for (i, ann) in self.dataset.annotations.iter().enumerate() {
+            self.anns.insert(ann.id, i);
+            self.img_to_anns
+                .entry(ann.image_id)
+                .or_default()
+                .push(ann.id);
+        }
+
+        for (i, img) in self.dataset.images.iter().enumerate() {
+            self.imgs.insert(img.id, i);
+        }
+
+        for (i, cat) in self.dataset.categories.iter().enumerate() {
+            self.cats.insert(cat.id, i);
+        }
+
+        // Build cat_to_imgs
+        for ann in &self.dataset.annotations {
+            self.cat_to_imgs
+                .entry(ann.category_id)
+                .or_default()
+                .push(ann.image_id);
+        }
+        // Deduplicate cat_to_imgs
+        for ids in self.cat_to_imgs.values_mut() {
+            ids.sort_unstable();
+            ids.dedup();
+        }
+    }
+
+    /// Get annotation IDs matching the given filters.
+    ///
+    /// All filter parameters are optional (pass empty slices / None to skip).
+    pub fn get_ann_ids(
+        &self,
+        img_ids: &[u64],
+        cat_ids: &[u64],
+        area_rng: Option<[f64; 2]>,
+        is_crowd: Option<bool>,
+    ) -> Vec<u64> {
+        let anns: Box<dyn Iterator<Item = &Annotation>> = if !img_ids.is_empty() {
+            let ann_ids: Vec<u64> = img_ids
+                .iter()
+                .flat_map(|id| self.img_to_anns.get(id).cloned().unwrap_or_default())
+                .collect();
+            Box::new(
+                ann_ids
+                    .into_iter()
+                    .filter_map(|id| self.anns.get(&id).map(|&i| &self.dataset.annotations[i])),
+            )
+        } else {
+            Box::new(self.dataset.annotations.iter())
+        };
+
+        let mut result: Vec<u64> = anns
+            .filter(|ann| {
+                if !cat_ids.is_empty() && !cat_ids.contains(&ann.category_id) {
+                    return false;
+                }
+                if let Some(rng) = area_rng {
+                    let a = ann.area.unwrap_or(0.0);
+                    if a < rng[0] || a > rng[1] {
+                        return false;
+                    }
+                }
+                if let Some(crowd) = is_crowd {
+                    if ann.iscrowd != crowd {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|ann| ann.id)
+            .collect();
+        result.sort_unstable();
+        result
+    }
+
+    /// Get category IDs matching the given filters.
+    pub fn get_cat_ids(&self, cat_nms: &[&str], sup_nms: &[&str], cat_ids: &[u64]) -> Vec<u64> {
+        let mut result: Vec<u64> = self
+            .dataset
+            .categories
+            .iter()
+            .filter(|cat| {
+                if !cat_nms.is_empty() && !cat_nms.contains(&cat.name.as_str()) {
+                    return false;
+                }
+                if !sup_nms.is_empty() {
+                    match &cat.supercategory {
+                        Some(sc) if sup_nms.contains(&sc.as_str()) => {}
+                        _ => return false,
+                    }
+                }
+                if !cat_ids.is_empty() && !cat_ids.contains(&cat.id) {
+                    return false;
+                }
+                true
+            })
+            .map(|cat| cat.id)
+            .collect();
+        result.sort_unstable();
+        result
+    }
+
+    /// Get image IDs matching the given filters.
+    pub fn get_img_ids(&self, img_ids: &[u64], cat_ids: &[u64]) -> Vec<u64> {
+        let mut ids: Vec<u64> = if !img_ids.is_empty() {
+            img_ids.to_vec()
+        } else {
+            self.dataset.images.iter().map(|img| img.id).collect()
+        };
+
+        if !cat_ids.is_empty() {
+            let mut valid: Vec<u64> = cat_ids
+                .iter()
+                .flat_map(|cid| self.cat_to_imgs.get(cid).cloned().unwrap_or_default())
+                .collect();
+            valid.sort_unstable();
+            valid.dedup();
+            ids.retain(|id| valid.binary_search(id).is_ok());
+        }
+
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Load annotations by IDs.
+    pub fn load_anns(&self, ids: &[u64]) -> Vec<&Annotation> {
+        ids.iter()
+            .filter_map(|id| self.anns.get(id).map(|&i| &self.dataset.annotations[i]))
+            .collect()
+    }
+
+    /// Load categories by IDs.
+    pub fn load_cats(&self, ids: &[u64]) -> Vec<&Category> {
+        ids.iter()
+            .filter_map(|id| self.cats.get(id).map(|&i| &self.dataset.categories[i]))
+            .collect()
+    }
+
+    /// Load images by IDs.
+    pub fn load_imgs(&self, ids: &[u64]) -> Vec<&Image> {
+        ids.iter()
+            .filter_map(|id| self.imgs.get(id).map(|&i| &self.dataset.images[i]))
+            .collect()
+    }
+
+    /// Get a single annotation by ID.
+    pub fn get_ann(&self, id: u64) -> Option<&Annotation> {
+        self.anns.get(&id).map(|&i| &self.dataset.annotations[i])
+    }
+
+    /// Get a single image by ID.
+    pub fn get_img(&self, id: u64) -> Option<&Image> {
+        self.imgs.get(&id).map(|&i| &self.dataset.images[i])
+    }
+
+    /// Get a single category by ID.
+    pub fn get_cat(&self, id: u64) -> Option<&Category> {
+        self.cats.get(&id).map(|&i| &self.dataset.categories[i])
+    }
+
+    /// Get annotation IDs for a specific image.
+    pub fn get_ann_ids_for_img(&self, img_id: u64) -> &[u64] {
+        self.img_to_anns
+            .get(&img_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Load detection/result annotations into a new COCO object.
+    ///
+    /// The result file can be a JSON array of annotation dicts, or a JSON object
+    /// with an `annotations` field. The result COCO object shares the images
+    /// and categories from self.
+    pub fn load_res(&self, res_file: &Path) -> Result<COCO, Box<dyn std::error::Error>> {
+        let file = std::fs::File::open(res_file)?;
+        let reader = std::io::BufReader::new(file);
+
+        // Try to parse as array first, then as Dataset
+        let anns: Vec<Annotation> = match serde_json::from_reader::<_, Vec<Annotation>>(reader) {
+            Ok(a) => a,
+            Err(_) => {
+                let file = std::fs::File::open(res_file)?;
+                let reader = std::io::BufReader::new(file);
+                let ds: Dataset = serde_json::from_reader(reader)?;
+                ds.annotations
+            }
+        };
+
+        let mut dataset = Dataset {
+            info: self.dataset.info.clone(),
+            images: self.dataset.images.clone(),
+            annotations: anns,
+            categories: self.dataset.categories.clone(),
+            licenses: self.dataset.licenses.clone(),
+        };
+
+        // For bbox results, compute area if not present and set segmentation
+        for ann in &mut dataset.annotations {
+            if ann.area.is_none() {
+                if let Some(ref bbox) = ann.bbox {
+                    ann.area = Some(bbox[2] * bbox[3]);
+                }
+            }
+            // Set ID if missing (pycocotools assigns IDs based on index + 1)
+        }
+
+        // Assign IDs to result annotations (1-indexed)
+        for (i, ann) in dataset.annotations.iter_mut().enumerate() {
+            if ann.id == 0 {
+                ann.id = (i + 1) as u64;
+            }
+        }
+
+        Ok(COCO::from_dataset(dataset))
+    }
+
+    /// Convert an annotation's segmentation to RLE.
+    pub fn ann_to_rle(&self, ann: &Annotation) -> Option<Rle> {
+        let img = self.get_img(ann.image_id)?;
+        let h = img.height;
+        let w = img.width;
+
+        match &ann.segmentation {
+            Some(Segmentation::Polygon(polys)) => Some(mask::fr_polys(polys, h, w)),
+            Some(Segmentation::CompressedRle { size, counts }) => {
+                Some(mask::rle_from_string(counts, size[0], size[1]))
+            }
+            Some(Segmentation::UncompressedRle { size, counts }) => Some(Rle {
+                h: size[0],
+                w: size[1],
+                counts: counts.clone(),
+            }),
+            None => {
+                // For bbox-only annotations, convert bbox to RLE
+                ann.bbox.as_ref().map(|bb| mask::fr_bbox(bb, h, w))
+            }
+        }
+    }
+
+    /// Convert an annotation to a binary mask.
+    pub fn ann_to_mask(&self, ann: &Annotation) -> Option<Vec<u8>> {
+        self.ann_to_rle(ann).map(|rle| mask::decode(&rle))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+
+    fn make_test_dataset() -> Dataset {
+        Dataset {
+            info: None,
+            images: vec![
+                Image {
+                    id: 1,
+                    file_name: "img1.jpg".into(),
+                    height: 100,
+                    width: 100,
+                    license: None,
+                    coco_url: None,
+                    flickr_url: None,
+                    date_captured: None,
+                },
+                Image {
+                    id: 2,
+                    file_name: "img2.jpg".into(),
+                    height: 200,
+                    width: 200,
+                    license: None,
+                    coco_url: None,
+                    flickr_url: None,
+                    date_captured: None,
+                },
+            ],
+            annotations: vec![
+                Annotation {
+                    id: 1,
+                    image_id: 1,
+                    category_id: 1,
+                    bbox: Some([10.0, 10.0, 20.0, 20.0]),
+                    area: Some(400.0),
+                    segmentation: None,
+                    iscrowd: false,
+                    keypoints: None,
+                    num_keypoints: None,
+                    score: None,
+                },
+                Annotation {
+                    id: 2,
+                    image_id: 1,
+                    category_id: 2,
+                    bbox: Some([30.0, 30.0, 10.0, 10.0]),
+                    area: Some(100.0),
+                    segmentation: None,
+                    iscrowd: false,
+                    keypoints: None,
+                    num_keypoints: None,
+                    score: None,
+                },
+                Annotation {
+                    id: 3,
+                    image_id: 2,
+                    category_id: 1,
+                    bbox: Some([0.0, 0.0, 50.0, 50.0]),
+                    area: Some(2500.0),
+                    segmentation: None,
+                    iscrowd: true,
+                    keypoints: None,
+                    num_keypoints: None,
+                    score: None,
+                },
+            ],
+            categories: vec![
+                Category {
+                    id: 1,
+                    name: "cat".into(),
+                    supercategory: Some("animal".into()),
+                    skeleton: None,
+                    keypoints: None,
+                },
+                Category {
+                    id: 2,
+                    name: "dog".into(),
+                    supercategory: Some("animal".into()),
+                    skeleton: None,
+                    keypoints: None,
+                },
+            ],
+            licenses: vec![],
+        }
+    }
+
+    #[test]
+    fn test_create_index() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        assert_eq!(coco.anns.len(), 3);
+        assert_eq!(coco.imgs.len(), 2);
+        assert_eq!(coco.cats.len(), 2);
+    }
+
+    #[test]
+    fn test_get_ann_ids_by_img() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_ann_ids(&[1], &[], None, None);
+        assert_eq!(ids, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_get_ann_ids_by_cat() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_ann_ids(&[], &[1], None, None);
+        assert_eq!(ids, vec![1, 3]);
+    }
+
+    #[test]
+    fn test_get_ann_ids_by_crowd() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_ann_ids(&[], &[], None, Some(true));
+        assert_eq!(ids, vec![3]);
+    }
+
+    #[test]
+    fn test_get_cat_ids() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_cat_ids(&["cat"], &[], &[]);
+        assert_eq!(ids, vec![1]);
+    }
+
+    #[test]
+    fn test_get_img_ids() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_img_ids(&[], &[1]);
+        assert_eq!(ids, vec![1, 2]);
+    }
+
+    #[test]
+    fn test_get_img_ids_by_cat2() {
+        let coco = COCO::from_dataset(make_test_dataset());
+        let ids = coco.get_img_ids(&[], &[2]);
+        assert_eq!(ids, vec![1]);
+    }
+}
