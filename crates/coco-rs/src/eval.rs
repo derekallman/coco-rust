@@ -499,6 +499,18 @@ impl COCOeval {
                         continue;
                     }
 
+                    // Initialize precision and recall to 0 for this (cat, area, maxDet).
+                    // -1 means "no data", 0 means "data exists but recall not reached".
+                    for t_idx in 0..t {
+                        let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
+                        recall[recall_idx] = 0.0;
+                        for r_idx in 0..r {
+                            let p_idx = acc.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
+                            precision[p_idx] = 0.0;
+                            scores[p_idx] = 0.0;
+                        }
+                    }
+
                     // Sort by score descending (stable sort to match pycocotools)
                     let mut inds: Vec<usize> = (0..all_dt_scores.len()).collect();
                     inds.sort_by(|&a, &b| {
