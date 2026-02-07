@@ -4,6 +4,8 @@
 //! The scan-line polygon rasterization and LEB128-like string encoding match
 //! the original exactly to ensure metric parity.
 
+use rayon::prelude::*;
+
 use crate::types::Rle;
 
 /// Encode a column-major binary mask into RLE.
@@ -235,31 +237,34 @@ pub fn iou(dt: &[Rle], gt: &[Rle], iscrowd: &[bool]) -> Vec<Vec<f64>> {
     let dt_areas: Vec<u64> = dt.iter().map(area).collect();
     let gt_areas: Vec<u64> = gt.iter().map(area).collect();
 
-    let mut result = vec![vec![0.0f64; g]; d];
-    for i in 0..d {
-        for j in 0..g {
-            let inter = area(&merge_two(&dt[i], &gt[j], true));
+    (0..d)
+        .into_par_iter()
+        .map(|i| {
             let dt_a = dt_areas[i] as f64;
-            let gt_a = gt_areas[j] as f64;
-            let inter_f = inter as f64;
-            let iou_val = if iscrowd[j] {
-                if dt_a == 0.0 {
-                    0.0
+            let mut row = vec![0.0f64; g];
+            for j in 0..g {
+                let inter = area(&merge_two(&dt[i], &gt[j], true));
+                let gt_a = gt_areas[j] as f64;
+                let inter_f = inter as f64;
+                let iou_val = if iscrowd[j] {
+                    if dt_a == 0.0 {
+                        0.0
+                    } else {
+                        inter_f / dt_a
+                    }
                 } else {
-                    inter_f / dt_a
-                }
-            } else {
-                let union = dt_a + gt_a - inter_f;
-                if union == 0.0 {
-                    0.0
-                } else {
-                    inter_f / union
-                }
-            };
-            result[i][j] = iou_val;
-        }
-    }
-    result
+                    let union = dt_a + gt_a - inter_f;
+                    if union == 0.0 {
+                        0.0
+                    } else {
+                        inter_f / union
+                    }
+                };
+                row[j] = iou_val;
+            }
+            row
+        })
+        .collect()
 }
 
 /// Compute bbox IoU between sets of bounding boxes.

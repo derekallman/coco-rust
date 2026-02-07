@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 
+use rayon::prelude::*;
+
 use crate::coco::COCO;
 use crate::mask;
 use crate::params::{IouType, Params};
@@ -110,96 +112,156 @@ impl COCOeval {
             vec![0] // dummy single category
         };
 
-        // Compute IoUs for all (image, category) pairs
+        // Compute IoUs for all (image, category) pairs in parallel
+        let img_ids = self.params.img_ids.clone();
+        let pairs: Vec<(u64, u64)> = cat_ids
+            .iter()
+            .flat_map(|&cat_id| img_ids.iter().map(move |&img_id| (img_id, cat_id)))
+            .collect();
+
+        #[allow(clippy::type_complexity)]
+        let iou_results: Vec<((u64, u64), Vec<Vec<f64>>)> = pairs
+            .par_iter()
+            .map(|&(img_id, cat_id)| {
+                let iou_matrix = Self::compute_iou_static(
+                    &self.coco_gt,
+                    &self.coco_dt,
+                    &self.params,
+                    img_id,
+                    cat_id,
+                );
+                ((img_id, cat_id), iou_matrix)
+            })
+            .collect();
+
         self.ious.clear();
-        for &cat_id in &cat_ids {
-            for &img_id in &self.params.img_ids {
-                let iou_matrix = self.compute_iou(img_id, cat_id);
-                self.ious.insert((img_id, cat_id), iou_matrix);
-            }
+        self.ious.reserve(iou_results.len());
+        for (key, val) in iou_results {
+            self.ious.insert(key, val);
         }
 
-        // Evaluate each (image, category, area_range, max_det) combination
+        // Evaluate each (image, category, area_range, max_det) combination in parallel
         let max_det = *self.params.max_dets.last().unwrap_or(&100);
-        self.eval_imgs.clear();
+        let area_rngs = self.params.area_rng.clone();
 
+        let mut eval_tuples: Vec<(u64, [f64; 2], u64)> =
+            Vec::with_capacity(cat_ids.len() * area_rngs.len() * img_ids.len());
         for &cat_id in &cat_ids {
-            for &area_rng in &self.params.area_rng.clone() {
-                for &img_id in &self.params.img_ids.clone() {
-                    let eval_img = self.evaluate_img(img_id, cat_id, area_rng, max_det);
-                    self.eval_imgs.push(eval_img);
+            for &area_rng in &area_rngs {
+                for &img_id in &img_ids {
+                    eval_tuples.push((cat_id, area_rng, img_id));
                 }
             }
         }
+
+        self.eval_imgs = eval_tuples
+            .par_iter()
+            .map(|&(cat_id, area_rng, img_id)| {
+                Self::evaluate_img_static(
+                    &self.coco_gt,
+                    &self.coco_dt,
+                    &self.params,
+                    &self.ious,
+                    img_id,
+                    cat_id,
+                    area_rng,
+                    max_det,
+                )
+            })
+            .collect();
     }
 
     /// Compute the IoU/OKS matrix for a given image and category.
-    fn compute_iou(&self, img_id: u64, cat_id: u64) -> Vec<Vec<f64>> {
-        let gt_anns = self.get_anns(&self.coco_gt, img_id, cat_id);
-        let dt_anns = self.get_anns(&self.coco_dt, img_id, cat_id);
+    fn compute_iou_static(
+        coco_gt: &COCO,
+        coco_dt: &COCO,
+        params: &Params,
+        img_id: u64,
+        cat_id: u64,
+    ) -> Vec<Vec<f64>> {
+        let gt_anns = Self::get_anns_static(coco_gt, params, img_id, cat_id);
+        let dt_anns = Self::get_anns_static(coco_dt, params, img_id, cat_id);
 
         if gt_anns.is_empty() || dt_anns.is_empty() {
             return Vec::new();
         }
 
-        match self.params.iou_type {
-            IouType::Segm => self.compute_segm_iou(&dt_anns, &gt_anns, img_id),
-            IouType::Bbox => self.compute_bbox_iou(&dt_anns, &gt_anns),
-            IouType::Keypoints => self.compute_oks(&dt_anns, &gt_anns),
+        match params.iou_type {
+            IouType::Segm => Self::compute_segm_iou_static(coco_gt, coco_dt, &dt_anns, &gt_anns),
+            IouType::Bbox => Self::compute_bbox_iou_static(coco_gt, coco_dt, &dt_anns, &gt_anns),
+            IouType::Keypoints => {
+                Self::compute_oks_static(coco_gt, coco_dt, params, &dt_anns, &gt_anns)
+            }
         }
     }
 
-    fn get_anns(&self, coco: &COCO, img_id: u64, cat_id: u64) -> Vec<u64> {
-        if self.params.use_cats {
+    fn get_anns_static(coco: &COCO, params: &Params, img_id: u64, cat_id: u64) -> Vec<u64> {
+        if params.use_cats {
             coco.get_ann_ids(&[img_id], &[cat_id], None, None)
         } else {
             coco.get_ann_ids(&[img_id], &[], None, None)
         }
     }
 
-    fn compute_segm_iou(&self, dt_ids: &[u64], gt_ids: &[u64], _img_id: u64) -> Vec<Vec<f64>> {
+    fn compute_segm_iou_static(
+        coco_gt: &COCO,
+        coco_dt: &COCO,
+        dt_ids: &[u64],
+        gt_ids: &[u64],
+    ) -> Vec<Vec<f64>> {
         let dt_rles: Vec<Rle> = dt_ids
             .iter()
             .filter_map(|&id| {
-                let ann = self.coco_dt.get_ann(id)?;
-                self.coco_dt.ann_to_rle(ann)
+                let ann = coco_dt.get_ann(id)?;
+                coco_dt.ann_to_rle(ann)
             })
             .collect();
         let gt_rles: Vec<Rle> = gt_ids
             .iter()
             .filter_map(|&id| {
-                let ann = self.coco_gt.get_ann(id)?;
-                self.coco_gt.ann_to_rle(ann)
+                let ann = coco_gt.get_ann(id)?;
+                coco_gt.ann_to_rle(ann)
             })
             .collect();
 
         let iscrowd: Vec<bool> = gt_ids
             .iter()
-            .filter_map(|&id| self.coco_gt.get_ann(id).map(|a| a.iscrowd))
+            .filter_map(|&id| coco_gt.get_ann(id).map(|a| a.iscrowd))
             .collect();
 
         mask::iou(&dt_rles, &gt_rles, &iscrowd)
     }
 
-    fn compute_bbox_iou(&self, dt_ids: &[u64], gt_ids: &[u64]) -> Vec<Vec<f64>> {
+    fn compute_bbox_iou_static(
+        coco_gt: &COCO,
+        coco_dt: &COCO,
+        dt_ids: &[u64],
+        gt_ids: &[u64],
+    ) -> Vec<Vec<f64>> {
         let dt_bbs: Vec<[f64; 4]> = dt_ids
             .iter()
-            .filter_map(|&id| self.coco_dt.get_ann(id)?.bbox)
+            .filter_map(|&id| coco_dt.get_ann(id)?.bbox)
             .collect();
         let gt_bbs: Vec<[f64; 4]> = gt_ids
             .iter()
-            .filter_map(|&id| self.coco_gt.get_ann(id)?.bbox)
+            .filter_map(|&id| coco_gt.get_ann(id)?.bbox)
             .collect();
         let iscrowd: Vec<bool> = gt_ids
             .iter()
-            .filter_map(|&id| self.coco_gt.get_ann(id).map(|a| a.iscrowd))
+            .filter_map(|&id| coco_gt.get_ann(id).map(|a| a.iscrowd))
             .collect();
 
         mask::bbox_iou(&dt_bbs, &gt_bbs, &iscrowd)
     }
 
-    fn compute_oks(&self, dt_ids: &[u64], gt_ids: &[u64]) -> Vec<Vec<f64>> {
-        let sigmas = &self.params.kpt_oks_sigmas;
+    fn compute_oks_static(
+        coco_gt: &COCO,
+        coco_dt: &COCO,
+        params: &Params,
+        dt_ids: &[u64],
+        gt_ids: &[u64],
+    ) -> Vec<Vec<f64>> {
+        let sigmas = &params.kpt_oks_sigmas;
         let num_kpts = sigmas.len();
         let vars: Vec<f64> = sigmas.iter().map(|s| 2.0 * s * s).collect();
 
@@ -209,11 +271,11 @@ impl COCOeval {
 
         let gt_anns: Vec<_> = gt_ids
             .iter()
-            .filter_map(|&id| self.coco_gt.get_ann(id))
+            .filter_map(|&id| coco_gt.get_ann(id))
             .collect();
         let dt_anns: Vec<_> = dt_ids
             .iter()
-            .filter_map(|&id| self.coco_dt.get_ann(id))
+            .filter_map(|&id| coco_dt.get_ann(id))
             .collect();
 
         for (j, gt_ann) in gt_anns.iter().enumerate() {
@@ -260,15 +322,19 @@ impl COCOeval {
     }
 
     /// Evaluate a single image+category combination.
-    fn evaluate_img(
-        &self,
+    #[allow(clippy::too_many_arguments)]
+    fn evaluate_img_static(
+        coco_gt: &COCO,
+        coco_dt: &COCO,
+        params: &Params,
+        ious: &HashMap<(u64, u64), Vec<Vec<f64>>>,
         img_id: u64,
         cat_id: u64,
         area_rng: [f64; 2],
         max_det: usize,
     ) -> Option<EvalImg> {
-        let gt_ids = self.get_anns(&self.coco_gt, img_id, cat_id);
-        let dt_ids = self.get_anns(&self.coco_dt, img_id, cat_id);
+        let gt_ids = Self::get_anns_static(coco_gt, params, img_id, cat_id);
+        let dt_ids = Self::get_anns_static(coco_dt, params, img_id, cat_id);
 
         if gt_ids.is_empty() && dt_ids.is_empty() {
             return None;
@@ -277,7 +343,7 @@ impl COCOeval {
         // Load GT annotations, determine ignore flags
         let gt_anns: Vec<_> = gt_ids
             .iter()
-            .filter_map(|&id| self.coco_gt.get_ann(id))
+            .filter_map(|&id| coco_gt.get_ann(id))
             .collect();
         let gt_ignore: Vec<bool> = gt_anns
             .iter()
@@ -296,7 +362,7 @@ impl COCOeval {
         // Load DT annotations, sort by score descending, limit to max_det
         let mut dt_anns: Vec<_> = dt_ids
             .iter()
-            .filter_map(|&id| self.coco_dt.get_ann(id))
+            .filter_map(|&id| coco_dt.get_ann(id))
             .collect();
         dt_anns.sort_by(|a, b| {
             b.score
@@ -320,9 +386,9 @@ impl COCOeval {
             .collect();
 
         // Get IoU matrix
-        let iou_matrix = self.ious.get(&(img_id, cat_id));
+        let iou_matrix = ious.get(&(img_id, cat_id));
 
-        let num_iou_thrs = self.params.iou_thrs.len();
+        let num_iou_thrs = params.iou_thrs.len();
         let d = dt_anns.len();
         let g = gt_anns.len();
 
@@ -340,7 +406,7 @@ impl COCOeval {
             let gt_id_to_iou_idx: HashMap<u64, usize> =
                 gt_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
 
-            for (t_idx, &iou_thr) in self.params.iou_thrs.iter().enumerate() {
+            for (t_idx, &iou_thr) in params.iou_thrs.iter().enumerate() {
                 for (di, dt_ann) in dt_anns.iter().enumerate() {
                     let mut best_iou = iou_thr; // minimum threshold
                     let mut best_gi: Option<usize> = None;
@@ -438,13 +504,23 @@ impl COCOeval {
         let a = self.params.area_rng.len();
         let m = self.params.max_dets.len();
 
-        let total = t * r * k * a * m;
-        let mut precision = vec![-1.0f64; total];
-        let mut scores = vec![-1.0f64; total];
-        let total_recall = t * k * a * m;
-        let mut recall = vec![-1.0f64; total_recall];
+        let num_imgs = self.params.img_ids.len();
 
-        let acc = AccumulatedEval {
+        // Build flat list of (k_idx, a_idx, m_idx) work items
+        let work_items: Vec<(usize, usize, usize)> = (0..k)
+            .flat_map(|k_idx| {
+                (0..a).flat_map(move |a_idx| (0..m).map(move |m_idx| (k_idx, a_idx, m_idx)))
+            })
+            .collect();
+
+        // Each work item produces a set of (index, value) writes for precision, recall, scores
+        struct AccResult {
+            precision_writes: Vec<(usize, f64)>,
+            recall_writes: Vec<(usize, f64)>,
+            scores_writes: Vec<(usize, f64)>,
+        }
+
+        let acc_idx = AccumulatedEval {
             precision: vec![],
             recall: vec![],
             scores: vec![],
@@ -455,138 +531,154 @@ impl COCOeval {
             m,
         };
 
-        let num_imgs = self.params.img_ids.len();
+        let results: Vec<AccResult> = work_items
+            .par_iter()
+            .map(|&(k_idx, a_idx, m_idx)| {
+                let max_det = self.params.max_dets[m_idx];
+                let k_actual = if self.params.use_cats { k_idx } else { 0 };
 
-        for (k_idx, &_cat_id) in self.params.cat_ids.iter().enumerate().take(k) {
-            for (a_idx, &_area_rng) in self.params.area_rng.iter().enumerate() {
-                for (m_idx, &max_det) in self.params.max_dets.iter().enumerate() {
-                    // Gather all eval_imgs for this (category, area_rng)
-                    // The eval_imgs are stored in order:
-                    // for cat in cats: for area in areas: for img in imgs
-                    let k_actual = if self.params.use_cats { k_idx } else { 0 };
+                let mut all_dt_scores: Vec<f64> = Vec::new();
+                let mut all_dt_matches: Vec<Vec<u64>> = vec![Vec::new(); t];
+                let mut all_dt_ignore: Vec<Vec<bool>> = vec![Vec::new(); t];
+                let mut num_gt = 0usize;
 
-                    let mut all_dt_scores: Vec<f64> = Vec::new();
-                    let mut all_dt_matches: Vec<Vec<u64>> = vec![Vec::new(); t]; // [T x concat_D]
-                    let mut all_dt_ignore: Vec<Vec<bool>> = vec![Vec::new(); t];
-                    let mut num_gt = 0usize;
-
-                    for img_idx in 0..num_imgs {
-                        let eval_idx = k_actual * (a * num_imgs) + a_idx * num_imgs + img_idx;
-                        if eval_idx >= self.eval_imgs.len() {
-                            continue;
-                        }
-                        let eval_img = match &self.eval_imgs[eval_idx] {
-                            Some(e) => e,
-                            None => continue,
-                        };
-
-                        // Apply max_det limit
-                        let nd = eval_img.dt_scores.len().min(max_det);
-
-                        all_dt_scores.extend_from_slice(&eval_img.dt_scores[..nd]);
-                        for t_idx in 0..t {
-                            all_dt_matches[t_idx]
-                                .extend_from_slice(&eval_img.dt_matches[t_idx][..nd]);
-                            all_dt_ignore[t_idx]
-                                .extend_from_slice(&eval_img.dt_ignore[t_idx][..nd]);
-                        }
-
-                        // Count non-ignored GTs
-                        num_gt += eval_img.gt_ignore.iter().filter(|&&x| !x).count();
-                    }
-
-                    if num_gt == 0 {
+                for img_idx in 0..num_imgs {
+                    let eval_idx = k_actual * (a * num_imgs) + a_idx * num_imgs + img_idx;
+                    if eval_idx >= self.eval_imgs.len() {
                         continue;
                     }
+                    let eval_img = match &self.eval_imgs[eval_idx] {
+                        Some(e) => e,
+                        None => continue,
+                    };
 
-                    // Initialize precision and recall to 0 for this (cat, area, maxDet).
-                    // -1 means "no data", 0 means "data exists but recall not reached".
+                    let nd = eval_img.dt_scores.len().min(max_det);
+
+                    all_dt_scores.extend_from_slice(&eval_img.dt_scores[..nd]);
                     for t_idx in 0..t {
-                        let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
-                        recall[recall_idx] = 0.0;
-                        for r_idx in 0..r {
-                            let p_idx = acc.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
-                            precision[p_idx] = 0.0;
-                            scores[p_idx] = 0.0;
+                        all_dt_matches[t_idx].extend_from_slice(&eval_img.dt_matches[t_idx][..nd]);
+                        all_dt_ignore[t_idx].extend_from_slice(&eval_img.dt_ignore[t_idx][..nd]);
+                    }
+
+                    num_gt += eval_img.gt_ignore.iter().filter(|&&x| !x).count();
+                }
+
+                let mut precision_writes = Vec::new();
+                let mut recall_writes = Vec::new();
+                let mut scores_writes = Vec::new();
+
+                if num_gt == 0 {
+                    return AccResult {
+                        precision_writes,
+                        recall_writes,
+                        scores_writes,
+                    };
+                }
+
+                // Initialize precision and recall to 0
+                for t_idx in 0..t {
+                    let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
+                    recall_writes.push((recall_idx, 0.0));
+                    for r_idx in 0..r {
+                        let p_idx = acc_idx.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
+                        precision_writes.push((p_idx, 0.0));
+                        scores_writes.push((p_idx, 0.0));
+                    }
+                }
+
+                // Sort by score descending
+                let mut inds: Vec<usize> = (0..all_dt_scores.len()).collect();
+                inds.sort_by(|&a, &b| {
+                    all_dt_scores[b]
+                        .partial_cmp(&all_dt_scores[a])
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                for t_idx in 0..t {
+                    let sorted_matches: Vec<u64> =
+                        inds.iter().map(|&i| all_dt_matches[t_idx][i]).collect();
+                    let sorted_ignore: Vec<bool> =
+                        inds.iter().map(|&i| all_dt_ignore[t_idx][i]).collect();
+
+                    let nd = sorted_matches.len();
+                    let mut tp = vec![0.0f64; nd];
+                    let mut fp = vec![0.0f64; nd];
+
+                    for d in 0..nd {
+                        if sorted_ignore[d] {
+                            continue;
+                        }
+                        if sorted_matches[d] != 0 {
+                            tp[d] = 1.0;
+                        } else {
+                            fp[d] = 1.0;
                         }
                     }
 
-                    // Sort by score descending (stable sort to match pycocotools)
-                    let mut inds: Vec<usize> = (0..all_dt_scores.len()).collect();
-                    inds.sort_by(|&a, &b| {
-                        all_dt_scores[b]
-                            .partial_cmp(&all_dt_scores[a])
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
+                    for d in 1..nd {
+                        tp[d] += tp[d - 1];
+                        fp[d] += fp[d - 1];
+                    }
 
-                    for t_idx in 0..t {
-                        let sorted_matches: Vec<u64> =
-                            inds.iter().map(|&i| all_dt_matches[t_idx][i]).collect();
-                        let sorted_ignore: Vec<bool> =
-                            inds.iter().map(|&i| all_dt_ignore[t_idx][i]).collect();
-
-                        // Compute TP/FP arrays
-                        let nd = sorted_matches.len();
-                        let mut tp = vec![0.0f64; nd];
-                        let mut fp = vec![0.0f64; nd];
-
-                        for d in 0..nd {
-                            if sorted_ignore[d] {
-                                continue;
-                            }
-                            if sorted_matches[d] != 0 {
-                                tp[d] = 1.0;
+                    let rc: Vec<f64> = tp.iter().map(|&x| x / num_gt as f64).collect();
+                    let pr: Vec<f64> = tp
+                        .iter()
+                        .zip(fp.iter())
+                        .map(|(&tp_v, &fp_v)| {
+                            if tp_v + fp_v > 0.0 {
+                                tp_v / (tp_v + fp_v)
                             } else {
-                                fp[d] = 1.0;
+                                0.0
                             }
-                        }
+                        })
+                        .collect();
 
-                        // Cumulative sum
-                        for d in 1..nd {
-                            tp[d] += tp[d - 1];
-                            fp[d] += fp[d - 1];
-                        }
+                    let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
+                    if !rc.is_empty() {
+                        recall_writes.push((recall_idx, *rc.last().unwrap()));
+                    }
 
-                        let rc: Vec<f64> = tp.iter().map(|&x| x / num_gt as f64).collect();
-                        let pr: Vec<f64> = tp
-                            .iter()
-                            .zip(fp.iter())
-                            .map(|(&tp_v, &fp_v)| {
-                                if tp_v + fp_v > 0.0 {
-                                    tp_v / (tp_v + fp_v)
-                                } else {
-                                    0.0
-                                }
-                            })
-                            .collect();
+                    let mut pr_interp = pr.clone();
+                    for d in (0..pr_interp.len().saturating_sub(1)).rev() {
+                        pr_interp[d] = pr_interp[d].max(pr_interp[d + 1]);
+                    }
 
-                        // Set recall for this T,K,A,M
-                        let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
-                        if !rc.is_empty() {
-                            recall[recall_idx] = *rc.last().unwrap();
-                        }
+                    let sorted_scores: Vec<f64> = inds.iter().map(|&i| all_dt_scores[i]).collect();
 
-                        // Make precision monotonically decreasing (from right to left)
-                        let mut pr_interp = pr.clone();
-                        for d in (0..pr_interp.len().saturating_sub(1)).rev() {
-                            pr_interp[d] = pr_interp[d].max(pr_interp[d + 1]);
-                        }
-
-                        // Interpolate at rec_thrs
-                        let sorted_scores: Vec<f64> =
-                            inds.iter().map(|&i| all_dt_scores[i]).collect();
-
-                        for (r_idx, &rec_thr) in self.params.rec_thrs.iter().enumerate() {
-                            let p_idx = acc.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
-                            // Find the first index where recall >= rec_thr
-                            let pos = rc.iter().position(|&r| r >= rec_thr);
-                            if let Some(pos) = pos {
-                                precision[p_idx] = pr_interp[pos];
-                                scores[p_idx] = sorted_scores[pos];
-                            }
+                    for (r_idx, &rec_thr) in self.params.rec_thrs.iter().enumerate() {
+                        let p_idx = acc_idx.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
+                        let pos = rc.iter().position(|&r| r >= rec_thr);
+                        if let Some(pos) = pos {
+                            precision_writes.push((p_idx, pr_interp[pos]));
+                            scores_writes.push((p_idx, sorted_scores[pos]));
                         }
                     }
                 }
+
+                AccResult {
+                    precision_writes,
+                    recall_writes,
+                    scores_writes,
+                }
+            })
+            .collect();
+
+        // Merge results into output arrays
+        let total = t * r * k * a * m;
+        let mut precision = vec![-1.0f64; total];
+        let mut scores = vec![-1.0f64; total];
+        let total_recall = t * k * a * m;
+        let mut recall = vec![-1.0f64; total_recall];
+
+        for result in results {
+            for (idx, val) in result.precision_writes {
+                precision[idx] = val;
+            }
+            for (idx, val) in result.recall_writes {
+                recall[idx] = val;
+            }
+            for (idx, val) in result.scores_writes {
+                scores[idx] = val;
             }
         }
 
