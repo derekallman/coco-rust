@@ -262,14 +262,67 @@ impl COCO {
             licenses: self.dataset.licenses.clone(),
         };
 
-        // For bbox results, compute area if not present and set segmentation
-        for ann in &mut dataset.annotations {
-            if ann.area.is_none() {
-                if let Some(ref bbox) = ann.bbox {
-                    ann.area = Some(bbox[2] * bbox[3]);
+        // Determine result type from first annotation (matching pycocotools loadRes logic)
+        // Priority: bbox (if present and non-empty) > segmentation > keypoints
+        if let Some(first) = dataset.annotations.first() {
+            let has_bbox = first.bbox.is_some();
+            let has_seg = first.segmentation.is_some();
+            let has_kpts = first.keypoints.is_some();
+
+            if has_bbox {
+                // bbox results: area = bbox w*h, create segmentation from bbox if missing
+                for ann in &mut dataset.annotations {
+                    if let Some(ref bbox) = ann.bbox {
+                        ann.area = Some(bbox[2] * bbox[3]);
+                        if ann.segmentation.is_none() {
+                            let (x1, y1, bw, bh) = (bbox[0], bbox[1], bbox[2], bbox[3]);
+                            let (x2, y2) = (x1 + bw, y1 + bh);
+                            ann.segmentation = Some(crate::types::Segmentation::Polygon(vec![
+                                vec![x1, y1, x1, y2, x2, y2, x2, y1],
+                            ]));
+                        }
+                    }
+                    ann.iscrowd = false;
+                }
+            } else if has_seg && !has_kpts {
+                // segmentation results: area from mask RLE
+                // Build a temporary COCO to use ann_to_rle
+                let temp = COCO::from_dataset(Dataset {
+                    info: dataset.info.clone(),
+                    images: dataset.images.clone(),
+                    annotations: dataset.annotations.clone(),
+                    categories: dataset.categories.clone(),
+                    licenses: dataset.licenses.clone(),
+                });
+                for ann in &mut dataset.annotations {
+                    if let Some(crate::types::Segmentation::CompressedRle { .. }) = ann.segmentation
+                    {
+                        if let Some(rle) = temp.ann_to_rle(ann) {
+                            ann.area = Some(mask::area(&rle) as f64);
+                            if ann.bbox.is_none() {
+                                let bb = mask::to_bbox(&rle);
+                                ann.bbox = Some(bb);
+                            }
+                        }
+                    }
+                    ann.iscrowd = false;
+                }
+            } else if has_kpts {
+                // keypoints results: area and bbox from keypoint extent
+                for ann in &mut dataset.annotations {
+                    if let Some(ref kpts) = ann.keypoints {
+                        let xs: Vec<f64> = kpts.iter().step_by(3).copied().collect();
+                        let ys: Vec<f64> = kpts.iter().skip(1).step_by(3).copied().collect();
+                        let x0 = xs.iter().copied().fold(f64::INFINITY, f64::min);
+                        let x1 = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let y0 = ys.iter().copied().fold(f64::INFINITY, f64::min);
+                        let y1 = ys.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        ann.area = Some((x1 - x0) * (y1 - y0));
+                        ann.bbox = Some([x0, y0, x1 - x0, y1 - y0]);
+                    }
+                    ann.iscrowd = false;
                 }
             }
-            // Set ID if missing (pycocotools assigns IDs based on index + 1)
         }
 
         // Assign IDs to result annotations (1-indexed)

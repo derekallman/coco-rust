@@ -28,17 +28,10 @@ impl Params {
                 vec![20],
                 vec![
                     [0.0, 1e10],
-                    [0.0, 32_f64.powi(2)],
                     [32_f64.powi(2), 96_f64.powi(2)],
                     [96_f64.powi(2), 1e10],
                 ],
-                vec![
-                    "all".into(),
-                    "medium".into(),
-                    "large".into(),
-                    // keypoints uses same labels for consistency
-                    "".into(),
-                ],
+                vec!["all".into(), "medium".into(), "large".into()],
             ),
             _ => (
                 vec![1, 10, 100],

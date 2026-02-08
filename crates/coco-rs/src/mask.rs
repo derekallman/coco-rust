@@ -314,8 +314,9 @@ pub fn bbox_iou(dt: &[[f64; 4]], gt: &[[f64; 4]], iscrowd: &[bool]) -> Vec<Vec<f
 
 /// Convert a polygon (flat list of `[x0, y0, x1, y1, ...]`) to RLE.
 ///
-/// This is a faithful port of `rleFrPoly` from maskApi.c.
-/// It uses the exact same scan-line rasterization algorithm to ensure parity.
+/// Faithful port of `rleFrPoly` from maskApi.c.
+/// Uses upsampling by 5x, Bresenham-like edge walking, y-boundary detection,
+/// and differential RLE encoding — exactly matching the C implementation.
 pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
     let k = xy.len() / 2;
     if k < 3 {
@@ -326,139 +327,135 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
         };
     }
 
-    let h_f = h as f64;
-    let w_f = w as f64;
-    let n = h as usize * w as usize;
+    let scale: f64 = 5.0;
+    let h_s = h as i64;
+    let w_s = w as i64;
 
-    // Scale coordinates: x = x * (h/w) ... no, the C code uses:
-    // x[j] = xy[j*2+0] (clamped), y[j] = xy[j*2+1] (clamped)
-    // All operations are done in pixel coordinates.
-
-    let mut x: Vec<f64> = Vec::with_capacity(k);
-    let mut y: Vec<f64> = Vec::with_capacity(k);
+    // Stage 1: Upsample coordinates and walk edges to get dense boundary points
+    let mut x_int: Vec<i32> = Vec::with_capacity(k + 1);
+    let mut y_int: Vec<i32> = Vec::with_capacity(k + 1);
     for j in 0..k {
-        x.push(xy[j * 2].max(0.0));
-        y.push(xy[j * 2 + 1].max(0.0).min(h_f));
+        x_int.push((scale * xy[j * 2] + 0.5) as i32);
+        y_int.push((scale * xy[j * 2 + 1] + 0.5) as i32);
+    }
+    x_int.push(x_int[0]);
+    y_int.push(y_int[0]);
+
+    // Count total boundary points
+    let mut m_total: usize = 0;
+    for j in 0..k {
+        m_total += (x_int[j] - x_int[j + 1])
+            .unsigned_abs()
+            .max((y_int[j] - y_int[j + 1]).unsigned_abs()) as usize
+            + 1;
     }
 
-    // For each edge, fill in the column transitions
-    // The C code works column-by-column (x is the column direction).
-    // It rasterizes edges and fills.
-
-    // We'll use the same approach as maskApi.c: collect all the y-crossings per column
-    // and then fill between pairs.
-
-    let mut mask = vec![0u32; n];
+    let mut u: Vec<i32> = Vec::with_capacity(m_total);
+    let mut v: Vec<i32> = Vec::with_capacity(m_total);
 
     for j in 0..k {
-        let j_next = (j + 1) % k;
-
-        let mut xs = x[j];
-        let mut xe = x[j_next];
-        let mut ys = y[j];
-        let mut ye = y[j_next];
-
-        // Compute the x-crossings for this edge
-        let dx = (xe - xs).abs();
-        let dy = (ye - ys).abs();
-
-        let flip = if dx >= dy {
-            // Iterate in x, track y
-            // Ensure xs <= xe
-            if xs > xe {
-                std::mem::swap(&mut xs, &mut xe);
-                std::mem::swap(&mut ys, &mut ye);
+        let mut xs = x_int[j];
+        let mut xe = x_int[j + 1];
+        let mut ys = y_int[j];
+        let mut ye = y_int[j + 1];
+        let dx = (xe - xs).unsigned_abs() as i32;
+        let dy = (ys - ye).unsigned_abs() as i32;
+        let flip = (dx >= dy && xs > xe) || (dx < dy && ys > ye);
+        if flip {
+            std::mem::swap(&mut xs, &mut xe);
+            std::mem::swap(&mut ys, &mut ye);
+        }
+        let s: f64 = if dx >= dy {
+            if dx == 0 {
+                0.0
+            } else {
+                (ye - ys) as f64 / dx as f64
             }
-            false
+        } else if dy == 0 {
+            0.0
         } else {
-            // Iterate in y, track x
-            // swap x<->y so we always iterate on the "longer" axis
-            std::mem::swap(&mut xs, &mut ys);
-            std::mem::swap(&mut xe, &mut ye);
-            if xs > xe {
-                std::mem::swap(&mut xs, &mut xe);
-                std::mem::swap(&mut ys, &mut ye);
-            }
-            true
+            (xe - xs) as f64 / dy as f64
         };
-
-        // The slope
-        let s = if xe == xs { 0.0 } else { (ye - ys) / (xe - xs) };
-
-        // Walk from ceil(xs) to floor(xe) (integers along the primary axis)
-        // For the C code compatibility:
-        // xs1 = max of (xs as int + 1, 0)
-        // xe1 = min of (xe as int + 1, h or w as appropriate)
-        let (bound_primary, bound_secondary) = if flip { (h_f, w_f) } else { (w_f, h_f) };
-
-        let xs1 = ((xs + 1.0).floor() as i64).max(0) as usize;
-        let xe1 = ((xe + 1.0).floor() as i64).min(bound_primary as i64) as usize;
-
-        if xs1 >= xe1 {
-            continue;
-        }
-
-        for d in xs1..xe1 {
-            // y value at this crossing
-            let t = ys + s * (d as f64 - xs);
-            // Clamp to [0, bound_secondary)
-            let t_int = if t < 0.0 {
-                0
-            } else if t >= bound_secondary {
-                bound_secondary as usize - 1
-            } else {
-                t as usize
-            };
-
-            if flip {
-                // Primary axis is y (d), secondary is x (t_int)
-                // Toggle mask[d + h * t_int]  -- column-major
-                let idx = d + (rle_h(h) * t_int);
-                if idx < n {
-                    mask[idx] ^= 1;
-                }
-            } else {
-                // Primary axis is x (d), secondary is y (t_int)
-                // Toggle mask[t_int + h * d] -- column-major
-                let idx = t_int + (rle_h(h) * d);
-                if idx < n {
-                    mask[idx] ^= 1;
-                }
+        if dx >= dy {
+            for d in 0..=dx {
+                let t = if flip { dx - d } else { d };
+                u.push(t + xs);
+                v.push((ys as f64 + s * t as f64 + 0.5) as i32);
+            }
+        } else {
+            for d in 0..=dy {
+                let t = if flip { dy - d } else { d };
+                v.push(t + ys);
+                u.push((xs as f64 + s * t as f64 + 0.5) as i32);
             }
         }
     }
 
-    // Now fill: within each column, a toggle means "switch between inside and outside".
-    // The mask currently has toggle bits; we need to prefix-XOR within each column.
-    for col in 0..(w as usize) {
-        let base = col * (h as usize);
-        let mut running = 0u32;
-        for row in 0..(h as usize) {
-            running ^= mask[base + row];
-            mask[base + row] = running;
+    // Stage 2: Get points along y-boundary and downsample
+    let m = u.len();
+    let mut bx: Vec<i32> = Vec::with_capacity(m);
+    let mut by: Vec<i32> = Vec::with_capacity(m);
+
+    for j in 1..m {
+        if u[j] != u[j - 1] {
+            let xd_raw = if u[j] < u[j - 1] { u[j] } else { u[j] - 1 };
+            let xd: f64 = (xd_raw as f64 + 0.5) / scale - 0.5;
+            if xd != xd.floor() || xd < 0.0 || xd > (w_s - 1) as f64 {
+                continue;
+            }
+            let yd_raw = if v[j] < v[j - 1] { v[j] } else { v[j - 1] };
+            let mut yd: f64 = (yd_raw as f64 + 0.5) / scale - 0.5;
+            if yd < 0.0 {
+                yd = 0.0;
+            } else if yd > h_s as f64 {
+                yd = h_s as f64;
+            }
+            yd = yd.ceil();
+            bx.push(xd as i32);
+            by.push(yd as i32);
         }
     }
 
-    // Encode to RLE
-    let mut counts = Vec::new();
-    let mut p = 0u32;
-    let mut c = 0u32;
-    for &v in &mask {
-        let v = if v != 0 { 1 } else { 0 };
-        if v != p {
-            counts.push(c);
-            c = 0;
-            p = v;
-        }
-        c += 1;
+    // Stage 3: Compute RLE encoding from y-boundary points
+    let bp = bx.len();
+    let mut a: Vec<u32> = Vec::with_capacity(bp + 1);
+    for j in 0..bp {
+        a.push((bx[j] as u32) * (h) + (by[j] as u32));
     }
-    counts.push(c);
+    a.push(h * w);
+    a.sort_unstable();
+
+    // Compute differences
+    let mut prev: u32 = 0;
+    for val in a.iter_mut() {
+        let t = *val;
+        *val = t - prev;
+        prev = t;
+    }
+
+    // Merge zero-length runs
+    let mut counts: Vec<u32> = Vec::with_capacity(a.len());
+    let mut i = 0;
+    if !a.is_empty() {
+        counts.push(a[0]);
+        i = 1;
+    }
+    while i < a.len() {
+        if a[i] > 0 {
+            counts.push(a[i]);
+            i += 1;
+        } else {
+            i += 1; // skip zero
+            if i < a.len() {
+                if let Some(last) = counts.last_mut() {
+                    *last += a[i];
+                }
+                i += 1;
+            }
+        }
+    }
 
     Rle { h, w, counts }
-}
-
-fn rle_h(h: u32) -> usize {
-    h as usize
 }
 
 /// Convert a bounding box `[x, y, w, h]` to an RLE mask.
@@ -730,7 +727,50 @@ mod tests {
         let poly = vec![2.0, 2.0, 7.0, 2.0, 4.0, 7.0];
         let rle = fr_poly(&poly, 10, 10);
         let a = area(&rle);
-        // A triangle with these vertices should have some positive area
-        assert!(a > 0);
+        // pycocotools gives area=12 for this triangle
+        assert_eq!(a, 12, "Triangle area should match pycocotools");
+    }
+
+    #[test]
+    fn test_fr_poly_large_area() {
+        // Ann 2551 from COCO val2017: 96 vertices, 612x612 image
+        // pycocotools mask area = 79002
+        let poly = vec![
+            147.76, 396.11, 158.48, 355.91, 153.12, 347.87, 137.04, 346.26, 125.25, 339.29, 124.71,
+            301.77, 139.18, 262.64, 159.55, 232.63, 185.82, 209.04, 226.01, 196.72, 244.77, 196.18,
+            251.74, 202.08, 275.33, 224.59, 283.9, 232.63, 295.16, 240.67, 315.53, 247.1, 327.85,
+            249.78, 338.57, 253.0, 354.12, 263.72, 379.31, 276.04, 395.39, 286.23, 424.33, 304.99,
+            454.95, 336.93, 479.62, 387.02, 491.58, 436.36, 494.57, 453.55, 497.56, 463.27, 493.08,
+            511.86, 487.02, 532.62, 470.4, 552.99, 401.26, 552.99, 399.65, 547.63, 407.15, 535.3,
+            389.46, 536.91, 374.46, 540.13, 356.23, 540.13, 354.09, 536.91, 341.23, 533.16, 340.15,
+            526.19, 342.83, 518.69, 355.7, 512.26, 360.52, 510.65, 374.46, 510.11, 375.53, 494.03,
+            369.1, 497.25, 361.06, 491.89, 361.59, 488.67, 354.63, 489.21, 346.05, 496.71, 343.37,
+            492.42, 335.33, 495.64, 333.19, 489.21, 327.83, 488.67, 323.0, 499.39, 312.82, 520.83,
+            304.24, 531.02, 291.91, 535.84, 273.69, 536.91, 269.4, 533.7, 261.36, 533.7, 256.0,
+            531.02, 254.93, 524.58, 268.33, 509.58, 277.98, 505.82, 287.09, 505.29, 301.56, 481.7,
+            302.1, 462.41, 294.06, 481.17, 289.77, 488.14, 277.98, 489.74, 261.36, 489.21, 254.93,
+            488.67, 254.93, 484.38, 244.75, 482.24, 247.96, 473.66, 260.83, 467.23, 276.37, 464.02,
+            283.34, 446.33, 285.48, 431.32, 287.63, 412.02, 277.98, 407.74, 260.29, 403.99, 257.61,
+            401.31, 255.47, 391.12, 233.8, 389.37, 220.18, 393.91, 210.65, 393.91, 199.76, 406.61,
+            187.51, 417.96, 178.43, 420.68, 167.99, 420.68, 163.45, 418.41, 158.01, 419.32, 148.47,
+            418.41, 145.3, 413.88, 146.66, 402.53,
+        ];
+        let rle = fr_poly(&poly, 612, 612);
+        let a = area(&rle);
+        assert!(
+            (a as i64 - 79002).abs() <= 2,
+            "Area {} should be within 2 of 79002",
+            a
+        );
+    }
+
+    #[test]
+    fn test_fr_poly_rect_nonsquare() {
+        // 40x40 rectangle in a 200h x 100w image
+        let poly = vec![10.0, 10.0, 50.0, 10.0, 50.0, 50.0, 10.0, 50.0];
+        let rle = fr_poly(&poly, 200, 100);
+        let a = area(&rle);
+        // pycocotools gives area=1600 for this rect
+        assert_eq!(a, 1600, "Rect area should match pycocotools");
     }
 }

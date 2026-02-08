@@ -71,6 +71,7 @@ pub struct COCOeval {
     eval_imgs: Vec<Option<EvalImg>>,
     ious: HashMap<(u64, u64), Vec<Vec<f64>>>,
     pub eval: Option<AccumulatedEval>,
+    pub stats: Option<Vec<f64>>,
 }
 
 impl COCOeval {
@@ -83,6 +84,7 @@ impl COCOeval {
             eval_imgs: Vec::new(),
             ious: HashMap::new(),
             eval: None,
+            stats: None,
         }
     }
 
@@ -263,7 +265,8 @@ impl COCOeval {
     ) -> Vec<Vec<f64>> {
         let sigmas = &params.kpt_oks_sigmas;
         let num_kpts = sigmas.len();
-        let vars: Vec<f64> = sigmas.iter().map(|s| 2.0 * s * s).collect();
+        // vars = (sigmas * 2)**2 = 4 * sigma^2  (matching pycocotools)
+        let vars: Vec<f64> = sigmas.iter().map(|s| (2.0 * s).powi(2)).collect();
 
         let d = dt_ids.len();
         let g = gt_ids.len();
@@ -283,10 +286,19 @@ impl COCOeval {
                 Some(k) => k,
                 None => continue,
             };
-            let gt_area = gt_ann.area.unwrap_or(0.0);
-            if gt_area == 0.0 {
-                continue;
-            }
+            let gt_area = gt_ann.area.unwrap_or(0.0) + f64::EPSILON;
+            let gt_bbox = gt_ann.bbox.unwrap_or([0.0; 4]);
+
+            // Count visible GT keypoints
+            let k1: usize = (0..num_kpts)
+                .filter(|&ki| gt_kpts.get(ki * 3 + 2).copied().unwrap_or(0.0) > 0.0)
+                .count();
+
+            // Compute ignore region bounds (double the GT bbox)
+            let x0 = gt_bbox[0] - gt_bbox[2];
+            let x1 = gt_bbox[0] + gt_bbox[2] * 2.0;
+            let y0 = gt_bbox[1] - gt_bbox[3];
+            let y1 = gt_bbox[1] + gt_bbox[3] * 2.0;
 
             for (i, dt_ann) in dt_anns.iter().enumerate() {
                 let dt_kpts = match &dt_ann.keypoints {
@@ -294,26 +306,44 @@ impl COCOeval {
                     None => continue,
                 };
 
-                let mut oks = 0.0;
-                let mut valid = 0;
+                // Compute per-keypoint distances
+                let mut e_vals: Vec<f64> = Vec::with_capacity(num_kpts);
 
-                for (k, &var_k) in vars.iter().enumerate().take(num_kpts) {
-                    let gx = gt_kpts.get(k * 3).copied().unwrap_or(0.0);
-                    let gy = gt_kpts.get(k * 3 + 1).copied().unwrap_or(0.0);
-                    let gv = gt_kpts.get(k * 3 + 2).copied().unwrap_or(0.0);
-                    let dx = dt_kpts.get(k * 3).copied().unwrap_or(0.0);
-                    let dy = dt_kpts.get(k * 3 + 1).copied().unwrap_or(0.0);
+                for (ki, &var_k) in vars.iter().enumerate().take(num_kpts) {
+                    let gx = gt_kpts.get(ki * 3).copied().unwrap_or(0.0);
+                    let gy = gt_kpts.get(ki * 3 + 1).copied().unwrap_or(0.0);
+                    let xd = dt_kpts.get(ki * 3).copied().unwrap_or(0.0);
+                    let yd = dt_kpts.get(ki * 3 + 1).copied().unwrap_or(0.0);
 
-                    if gv > 0.0 {
-                        let dist_sq = (dx - gx).powi(2) + (dy - gy).powi(2);
-                        let e = dist_sq / (2.0 * gt_area * var_k);
-                        oks += (-e).exp();
-                        valid += 1;
-                    }
+                    let (dx, dy) = if k1 > 0 {
+                        (xd - gx, yd - gy)
+                    } else {
+                        // No visible GT keypoints: measure distance to bbox boundary
+                        let dx = 0.0_f64.max(x0 - xd) + 0.0_f64.max(xd - x1);
+                        let dy = 0.0_f64.max(y0 - yd) + 0.0_f64.max(yd - y1);
+                        (dx, dy)
+                    };
+
+                    let e = (dx * dx + dy * dy) / var_k / gt_area / 2.0;
+                    e_vals.push(e);
                 }
 
-                if valid > 0 {
-                    result[i][j] = oks / valid as f64;
+                // Filter to visible keypoints if k1 > 0
+                let filtered: Vec<f64> = if k1 > 0 {
+                    e_vals
+                        .iter()
+                        .enumerate()
+                        .filter(|&(ki, _)| gt_kpts.get(ki * 3 + 2).copied().unwrap_or(0.0) > 0.0)
+                        .map(|(_, &e)| e)
+                        .collect()
+                } else {
+                    e_vals
+                };
+
+                if !filtered.is_empty() {
+                    let oks: f64 =
+                        filtered.iter().map(|&e| (-e).exp()).sum::<f64>() / filtered.len() as f64;
+                    result[i][j] = oks;
                 }
             }
         }
@@ -345,11 +375,17 @@ impl COCOeval {
             .iter()
             .filter_map(|&id| coco_gt.get_ann(id))
             .collect();
+        let is_kp = params.iou_type == IouType::Keypoints;
         let gt_ignore: Vec<bool> = gt_anns
             .iter()
             .map(|ann| {
                 let a = ann.area.unwrap_or(0.0);
-                ann.iscrowd || a < area_rng[0] || a > area_rng[1]
+                let mut ignore = ann.iscrowd || a < area_rng[0] || a > area_rng[1];
+                // For keypoints, also ignore GT annotations with num_keypoints == 0
+                if is_kp {
+                    ignore = ignore || ann.num_keypoints.unwrap_or(0) == 0;
+                }
+                ignore
             })
             .collect();
 
@@ -695,7 +731,7 @@ impl COCOeval {
     }
 
     /// Print the standard 12-line COCO evaluation summary.
-    pub fn summarize(&self) {
+    pub fn summarize(&mut self) {
         let eval = match &self.eval {
             Some(e) => e,
             None => {
@@ -935,8 +971,11 @@ impl COCOeval {
             IouType::Keypoints => "keypoints",
         };
 
+        let mut stats = Vec::with_capacity(metrics.len());
+
         for m in &metrics {
             let val = summarize_stat(m.ap, m.iou_thr, m.area_lbl, m.max_det);
+            stats.push(val);
 
             let metric_name = if m.ap {
                 "Average Precision"
@@ -971,5 +1010,6 @@ impl COCOeval {
         }
 
         println!("Eval type: {}", iou_type_str);
+        self.stats = Some(stats);
     }
 }
