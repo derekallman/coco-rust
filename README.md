@@ -12,7 +12,7 @@ A Rust implementation of [pycocotools](https://github.com/cocodataset/cocoapi/tr
 
 ## Performance
 
-Benchmarked on COCO val2017 (5,000 images), Apple M4 Max:
+Benchmarked on COCO val2017 (5,000 images), Apple M1 MacBook Air:
 
 | Eval Type | pycocotools | coco-rust (1 thread) | coco-rust (parallel) |
 |-----------|-------------|----------------------|----------------------|
