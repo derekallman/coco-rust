@@ -8,17 +8,17 @@ A Rust implementation of [pycocotools](https://github.com/cocodataset/cocoapi/tr
 - All three evaluation types: **bbox**, **segm**, **keypoints**
 - Pure Rust RLE mask operations (encode, decode, merge, IoU, polygon rasterization)
 - Exact metric parity with pycocotools — identical AP/AR numbers on the same inputs
-- 5-19x faster than pycocotools with parallelism (2-12x single-threaded)
+- 11-26x faster than pycocotools with parallelism
 
 ## Performance
 
 Benchmarked on COCO val2017 (5,000 images), Apple M1 MacBook Air:
 
-| Eval Type | pycocotools | coco-rust (1 thread) | coco-rust (parallel) |
-|-----------|-------------|----------------------|----------------------|
-| bbox      | 13.1s       | 6.3s (2.1x)         | **2.1s (6.2x)**      |
-| segm      | 17.1s       | 8.1s (2.1x)         | **3.2s (5.3x)**      |
-| keypoints | 4.6s        | 0.38s (12.1x)       | **0.24s (19.2x)**    |
+| Eval Type | pycocotools | coco-rust |
+|-----------|-------------|-----------|
+| bbox      | 13.1s       | **0.81s (16.2x)** |
+| segm      | 17.1s       | **1.55s (11.0x)** |
+| keypoints | 4.6s        | **0.18s (25.6x)** |
 
 All metrics match pycocotools within 0.003 (many are exact).
 
