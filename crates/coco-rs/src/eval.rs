@@ -189,19 +189,19 @@ impl COCOeval {
         }
 
         match params.iou_type {
-            IouType::Segm => Self::compute_segm_iou_static(coco_gt, coco_dt, &dt_anns, &gt_anns),
-            IouType::Bbox => Self::compute_bbox_iou_static(coco_gt, coco_dt, &dt_anns, &gt_anns),
+            IouType::Segm => Self::compute_segm_iou_static(coco_gt, coco_dt, dt_anns, gt_anns),
+            IouType::Bbox => Self::compute_bbox_iou_static(coco_gt, coco_dt, dt_anns, gt_anns),
             IouType::Keypoints => {
-                Self::compute_oks_static(coco_gt, coco_dt, params, &dt_anns, &gt_anns)
+                Self::compute_oks_static(coco_gt, coco_dt, params, dt_anns, gt_anns)
             }
         }
     }
 
-    fn get_anns_static(coco: &COCO, params: &Params, img_id: u64, cat_id: u64) -> Vec<u64> {
+    fn get_anns_static<'a>(coco: &'a COCO, params: &Params, img_id: u64, cat_id: u64) -> &'a [u64] {
         if params.use_cats {
-            coco.get_ann_ids(&[img_id], &[cat_id], None, None)
+            coco.get_ann_ids_for_img_cat(img_id, cat_id)
         } else {
-            coco.get_ann_ids(&[img_id], &[], None, None)
+            coco.get_ann_ids_for_img(img_id)
         }
     }
 
@@ -433,45 +433,46 @@ impl COCOeval {
         let mut dt_ignore_flags = vec![vec![false; d]; num_iou_thrs];
 
         if let Some(iou_mat) = iou_matrix {
-            // We need to map from sorted DT/GT indices to original indices in iou_mat
-            // The iou_mat uses the same ordering as dt_ids / gt_ids (which come from get_anns)
-            // We need to find the index in dt_ids/gt_ids for each ann
-
+            // Precompute remapped IoU matrix indexed by (dt_anns order, gt_order)
+            // so we can use direct array indexing instead of HashMap lookups.
             let dt_id_to_iou_idx: HashMap<u64, usize> =
                 dt_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
             let gt_id_to_iou_idx: HashMap<u64, usize> =
                 gt_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+            let iou_reordered: Vec<Vec<f64>> = dt_anns
+                .iter()
+                .map(|dt_ann| {
+                    let dt_idx = dt_id_to_iou_idx.get(&dt_ann.id).copied();
+                    gt_order
+                        .iter()
+                        .map(|&gi_orig| {
+                            let gt_idx = gt_id_to_iou_idx.get(&gt_anns[gi_orig].id).copied();
+                            match (dt_idx, gt_idx) {
+                                (Some(di), Some(gi))
+                                    if di < iou_mat.len() && gi < iou_mat[di].len() =>
+                                {
+                                    iou_mat[di][gi]
+                                }
+                                _ => 0.0,
+                            }
+                        })
+                        .collect()
+                })
+                .collect();
 
             for (t_idx, &iou_thr) in params.iou_thrs.iter().enumerate() {
                 for (di, dt_ann) in dt_anns.iter().enumerate() {
                     let mut best_iou = iou_thr; // minimum threshold
                     let mut best_gi: Option<usize> = None;
 
-                    let dt_iou_idx = match dt_id_to_iou_idx.get(&dt_ann.id) {
-                        Some(&idx) => idx,
-                        None => continue,
-                    };
+                    let dt_row = &iou_reordered[di];
 
-                    if dt_iou_idx >= iou_mat.len() || iou_mat[dt_iou_idx].is_empty() {
-                        continue;
-                    }
-
-                    for (gi_sorted, &gi_orig) in gt_order.iter().enumerate() {
-                        let gt_iou_idx = match gt_id_to_iou_idx.get(&gt_anns[gi_orig].id) {
-                            Some(&idx) => idx,
-                            None => continue,
-                        };
-
+                    for (gi_sorted, &iou_val) in dt_row.iter().enumerate() {
                         // Skip already matched non-crowd GTs
                         if gt_matches[t_idx][gi_sorted] != 0 && !gt_ignore_sorted[gi_sorted] {
                             continue;
                         }
-
-                        if gt_iou_idx >= iou_mat[dt_iou_idx].len() {
-                            continue;
-                        }
-
-                        let iou_val = iou_mat[dt_iou_idx][gt_iou_idx];
 
                         // Match: iou must meet threshold, prefer non-ignored GT
                         if iou_val < best_iou {
@@ -630,63 +631,68 @@ impl COCOeval {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
 
+                let nd = inds.len();
+
+                // Hoist sorted_scores outside the threshold loop (identical across thresholds)
+                let sorted_scores: Vec<f64> = inds.iter().map(|&i| all_dt_scores[i]).collect();
+
+                // Pre-allocate buffers reused across thresholds
+                let mut tp = vec![0.0f64; nd];
+                let mut fp = vec![0.0f64; nd];
+                let mut rc = vec![0.0f64; nd];
+                let mut pr = vec![0.0f64; nd];
+
+                let num_gt_f = num_gt as f64;
+
                 for t_idx in 0..t {
-                    let sorted_matches: Vec<u64> =
-                        inds.iter().map(|&i| all_dt_matches[t_idx][i]).collect();
-                    let sorted_ignore: Vec<bool> =
-                        inds.iter().map(|&i| all_dt_ignore[t_idx][i]).collect();
-
-                    let nd = sorted_matches.len();
-                    let mut tp = vec![0.0f64; nd];
-                    let mut fp = vec![0.0f64; nd];
-
-                    for d in 0..nd {
-                        if sorted_ignore[d] {
-                            continue;
-                        }
-                        if sorted_matches[d] != 0 {
-                            tp[d] = 1.0;
+                    // Fill tp/fp from sorted matches/ignore
+                    for (out_idx, &src_idx) in inds.iter().enumerate() {
+                        if all_dt_ignore[t_idx][src_idx] {
+                            tp[out_idx] = 0.0;
+                            fp[out_idx] = 0.0;
+                        } else if all_dt_matches[t_idx][src_idx] != 0 {
+                            tp[out_idx] = 1.0;
+                            fp[out_idx] = 0.0;
                         } else {
-                            fp[d] = 1.0;
+                            tp[out_idx] = 0.0;
+                            fp[out_idx] = 1.0;
                         }
                     }
 
+                    // Cumulative sum
                     for d in 1..nd {
                         tp[d] += tp[d - 1];
                         fp[d] += fp[d - 1];
                     }
 
-                    let rc: Vec<f64> = tp.iter().map(|&x| x / num_gt as f64).collect();
-                    let pr: Vec<f64> = tp
-                        .iter()
-                        .zip(fp.iter())
-                        .map(|(&tp_v, &fp_v)| {
-                            if tp_v + fp_v > 0.0 {
-                                tp_v / (tp_v + fp_v)
-                            } else {
-                                0.0
-                            }
-                        })
-                        .collect();
+                    // Compute recall and precision in-place
+                    for d in 0..nd {
+                        rc[d] = tp[d] / num_gt_f;
+                        let total = tp[d] + fp[d];
+                        pr[d] = if total > 0.0 { tp[d] / total } else { 0.0 };
+                    }
 
                     let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
-                    if !rc.is_empty() {
-                        recall_writes.push((recall_idx, *rc.last().unwrap()));
+                    if nd > 0 {
+                        recall_writes.push((recall_idx, rc[nd - 1]));
                     }
 
-                    let mut pr_interp = pr.clone();
-                    for d in (0..pr_interp.len().saturating_sub(1)).rev() {
-                        pr_interp[d] = pr_interp[d].max(pr_interp[d + 1]);
+                    // Interpolate precision in-place (make monotonically decreasing from right)
+                    for d in (0..nd.saturating_sub(1)).rev() {
+                        pr[d] = pr[d].max(pr[d + 1]);
                     }
 
-                    let sorted_scores: Vec<f64> = inds.iter().map(|&i| all_dt_scores[i]).collect();
-
+                    // Two-pointer search: both rc and rec_thrs are sorted ascending
+                    let mut rc_ptr = 0;
                     for (r_idx, &rec_thr) in self.params.rec_thrs.iter().enumerate() {
                         let p_idx = acc_idx.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
-                        let pos = rc.iter().position(|&r| r >= rec_thr);
-                        if let Some(pos) = pos {
-                            precision_writes.push((p_idx, pr_interp[pos]));
-                            scores_writes.push((p_idx, sorted_scores[pos]));
+                        // Advance pointer to first rc >= rec_thr
+                        while rc_ptr < nd && rc[rc_ptr] < rec_thr {
+                            rc_ptr += 1;
+                        }
+                        if rc_ptr < nd {
+                            precision_writes.push((p_idx, pr[rc_ptr]));
+                            scores_writes.push((p_idx, sorted_scores[rc_ptr]));
                         }
                     }
                 }

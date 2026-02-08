@@ -21,6 +21,8 @@ pub struct COCO {
     img_to_anns: HashMap<u64, Vec<u64>>,
     /// cat_id -> [img_id, ...] (unique)
     cat_to_imgs: HashMap<u64, Vec<u64>>,
+    /// (img_id, cat_id) -> [ann_id, ...] (sorted)
+    img_cat_to_anns: HashMap<(u64, u64), Vec<u64>>,
 }
 
 impl COCO {
@@ -36,6 +38,7 @@ impl COCO {
             cats: HashMap::new(),
             img_to_anns: HashMap::new(),
             cat_to_imgs: HashMap::new(),
+            img_cat_to_anns: HashMap::new(),
         };
         coco.create_index();
         Ok(coco)
@@ -50,6 +53,7 @@ impl COCO {
             cats: HashMap::new(),
             img_to_anns: HashMap::new(),
             cat_to_imgs: HashMap::new(),
+            img_cat_to_anns: HashMap::new(),
         };
         coco.create_index();
         coco
@@ -62,11 +66,16 @@ impl COCO {
         self.cats.clear();
         self.img_to_anns.clear();
         self.cat_to_imgs.clear();
+        self.img_cat_to_anns.clear();
 
         for (i, ann) in self.dataset.annotations.iter().enumerate() {
             self.anns.insert(ann.id, i);
             self.img_to_anns
                 .entry(ann.image_id)
+                .or_default()
+                .push(ann.id);
+            self.img_cat_to_anns
+                .entry((ann.image_id, ann.category_id))
                 .or_default()
                 .push(ann.id);
         }
@@ -90,6 +99,10 @@ impl COCO {
         for ids in self.cat_to_imgs.values_mut() {
             ids.sort_unstable();
             ids.dedup();
+        }
+        // Sort img_cat_to_anns values
+        for ids in self.img_cat_to_anns.values_mut() {
+            ids.sort_unstable();
         }
     }
 
@@ -224,6 +237,16 @@ impl COCO {
     /// Get a single category by ID.
     pub fn get_cat(&self, id: u64) -> Option<&Category> {
         self.cats.get(&id).map(|&i| &self.dataset.categories[i])
+    }
+
+    /// Get annotation IDs for a specific (image, category) pair.
+    ///
+    /// Single HashMap lookup — much faster than `get_ann_ids` with filtering.
+    pub fn get_ann_ids_for_img_cat(&self, img_id: u64, cat_id: u64) -> &[u64] {
+        self.img_cat_to_anns
+            .get(&(img_id, cat_id))
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Get annotation IDs for a specific image.

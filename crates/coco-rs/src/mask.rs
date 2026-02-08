@@ -223,6 +223,59 @@ fn merge_two(a: &Rle, b: &Rle, intersect: bool) -> Rle {
     Rle { h, w, counts }
 }
 
+/// Compute the intersection area of two RLE masks without allocating.
+///
+/// Walks both RLE streams simultaneously (same logic as `merge_two` with intersect=true)
+/// but only accumulates the count where both masks are foreground.
+fn intersection_area(a: &Rle, b: &Rle) -> u64 {
+    let n = (a.h as u64) * (a.w as u64);
+    let mut ca = 0u64;
+    let mut cb = 0u64;
+    let mut va = false;
+    let mut vb = false;
+    let mut ai = 0usize;
+    let mut bi = 0usize;
+    let mut total = 0u64;
+    let mut count = 0u64;
+
+    while total < n {
+        if ca == 0 && ai < a.counts.len() {
+            ca = a.counts[ai] as u64;
+            va = ai % 2 == 1;
+            ai += 1;
+        }
+        if cb == 0 && bi < b.counts.len() {
+            cb = b.counts[bi] as u64;
+            vb = bi % 2 == 1;
+            bi += 1;
+        }
+
+        let step = if ca > 0 && cb > 0 {
+            ca.min(cb)
+        } else if ca > 0 {
+            ca
+        } else if cb > 0 {
+            cb
+        } else {
+            break;
+        };
+
+        if va && vb {
+            count += step;
+        }
+
+        if ca > 0 {
+            ca -= step;
+        }
+        if cb > 0 {
+            cb -= step;
+        }
+        total += step;
+    }
+
+    count
+}
+
 /// Compute IoU between `dt` and `gt` RLE masks.
 ///
 /// Returns a D×G matrix (row-major, `dt.len()` rows, `gt.len()` columns).
@@ -243,7 +296,7 @@ pub fn iou(dt: &[Rle], gt: &[Rle], iscrowd: &[bool]) -> Vec<Vec<f64>> {
             let dt_a = dt_areas[i] as f64;
             let mut row = vec![0.0f64; g];
             for j in 0..g {
-                let inter = area(&merge_two(&dt[i], &gt[j], true));
+                let inter = intersection_area(&dt[i], &gt[j]);
                 let gt_a = gt_areas[j] as f64;
                 let inter_f = inter as f64;
                 let iou_val = if iscrowd[j] {
@@ -459,6 +512,9 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
 }
 
 /// Convert a bounding box `[x, y, w, h]` to an RLE mask.
+///
+/// Computes column-major RLE counts analytically from bbox coordinates
+/// without allocating a full pixel mask.
 pub fn fr_bbox(bb: &[f64; 4], h: u32, w: u32) -> Rle {
     let bx = bb[0];
     let by = bb[1];
@@ -479,16 +535,48 @@ pub fn fr_bbox(bb: &[f64; 4], h: u32, w: u32) -> Rle {
         };
     }
 
-    // Build mask in column-major order
-    let n = (h as usize) * (w as usize);
-    let mut mask = vec![0u8; n];
-    for col in xs..xe {
-        for row in ys..ye {
-            mask[row as usize + (h as usize) * col as usize] = 1;
+    // In column-major order, each column within [xs, xe) has the pattern:
+    //   ys zeros (from row 0 to ys), (ye - ys) ones, (h - ye) zeros
+    // The first column starts at offset xs * h.
+    // Between columns, the trailing zeros of one column merge with the leading zeros of the next.
+    let col_ones = ye - ys;
+    let num_cols = xe - xs;
+
+    let mut counts = Vec::with_capacity((2 * num_cols + 2) as usize);
+
+    // Leading zeros before first foreground pixel
+    let leading = xs * h + ys;
+    counts.push(leading);
+
+    if num_cols == 1 {
+        // Single column: ones, then trailing zeros
+        counts.push(col_ones);
+        let trailing = (w - xe) * h + (h - ye);
+        if trailing > 0 {
+            counts.push(trailing);
+        }
+    } else {
+        // First column ones
+        counts.push(col_ones);
+
+        // For columns 1..num_cols-1, gap between columns = (h - ye) + ys
+        let gap = h - col_ones; // = (h - ye) + ys
+        for _ in 1..num_cols - 1 {
+            counts.push(gap);
+            counts.push(col_ones);
+        }
+
+        // Last column: gap, ones, trailing
+        counts.push(gap);
+        counts.push(col_ones);
+
+        let trailing = (w - xe) * h + (h - ye);
+        if trailing > 0 {
+            counts.push(trailing);
         }
     }
 
-    encode(&mask, h, w)
+    Rle { h, w, counts }
 }
 
 /// Compress an RLE into the LEB128-like string format used by COCO.
