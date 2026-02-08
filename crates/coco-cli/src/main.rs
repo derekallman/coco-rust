@@ -33,6 +33,10 @@ struct Cli {
     /// Max detections per image (comma-separated, e.g., "1,10,100")
     #[arg(long, value_delimiter = ',')]
     max_dets: Option<Vec<usize>>,
+
+    /// Class-agnostic evaluation (pool all categories)
+    #[arg(long)]
+    class_agnostic: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -67,6 +71,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(max_dets) = cli.max_dets {
         coco_eval.params.max_dets = max_dets;
+    }
+    if cli.class_agnostic {
+        coco_eval.params.use_cats = false;
     }
 
     eprintln!("Evaluating...");

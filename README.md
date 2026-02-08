@@ -45,6 +45,7 @@ Options:
 - `--img-ids` — filter to specific image IDs (comma-separated)
 - `--cat-ids` — filter to specific category IDs (comma-separated)
 - `--max-dets` — max detections per image (comma-separated, e.g. `1,10,100`)
+- `--class-agnostic` — pool all categories for class-agnostic evaluation
 
 ### Library
 
