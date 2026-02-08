@@ -1,0 +1,14 @@
+[package]
+name = "coco-pyo3"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for coco-rs via PyO3"
+
+[lib]
+name = "coco_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+coco-core = { path = "../coco-rs", package = "coco-rs" }
+pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = "0.23"

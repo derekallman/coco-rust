@@ -165,14 +165,14 @@ fn merge_two(a: &Rle, b: &Rle, intersect: bool) -> Rle {
     let mut v_prev: Option<bool> = None;
 
     while total < n {
-        // Refill a
-        if ca == 0 && ai < a.counts.len() {
+        // Refill a (skip 0-length runs)
+        while ca == 0 && ai < a.counts.len() {
             ca = a.counts[ai] as u64;
             va = ai % 2 == 1;
             ai += 1;
         }
-        // Refill b
-        if cb == 0 && bi < b.counts.len() {
+        // Refill b (skip 0-length runs)
+        while cb == 0 && bi < b.counts.len() {
             cb = b.counts[bi] as u64;
             vb = bi % 2 == 1;
             bi += 1;
@@ -239,12 +239,13 @@ fn intersection_area(a: &Rle, b: &Rle) -> u64 {
     let mut count = 0u64;
 
     while total < n {
-        if ca == 0 && ai < a.counts.len() {
+        // Skip 0-length runs
+        while ca == 0 && ai < a.counts.len() {
             ca = a.counts[ai] as u64;
             va = ai % 2 == 1;
             ai += 1;
         }
-        if cb == 0 && bi < b.counts.len() {
+        while cb == 0 && bi < b.counts.len() {
             cb = b.counts[bi] as u64;
             vb = bi % 2 == 1;
             bi += 1;
