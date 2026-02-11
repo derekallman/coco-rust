@@ -4,19 +4,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-coco-rust is a Rust implementation of [pycocotools](https://github.com/cocodataset/cocoapi/tree/master/PythonAPI/pycocotools), the Python API for the COCO (Common Objects in Context) dataset. COCO is a standard benchmark for object detection, segmentation, and captioning evaluation in computer vision.
+coco-rust is a Rust implementation of [pycocotools](https://github.com/cocodataset/cocoapi/tree/master/PythonAPI/pycocotools), the Python API for the COCO (Common Objects in Context) dataset. It provides 11-26x speedups over pycocotools for bbox, segmentation, and keypoint evaluation.
+
+## Workspace Structure
+
+```
+crates/coco-rs/      # Pure Rust library — all core logic
+crates/coco-cli/     # CLI binary
+crates/coco-pyo3/    # PyO3 Python bindings (cdylib, built with maturin)
+```
 
 ## Build Commands
 
 ```bash
-cargo build            # Build the project
-cargo test             # Run all tests
-cargo test <test_name> # Run a single test
-cargo clippy           # Lint
-cargo fmt              # Format code
-cargo fmt -- --check   # Check formatting without modifying
+cargo build                    # Build all crates
+cargo test                     # Run all tests
+cargo test -p coco-rs          # Run library tests only
+cargo check -p coco-pyo3       # Check pyo3 crate (can't link without Python)
+cargo clippy                   # Lint
+cargo fmt --all                # Format (use --all, not --workspace)
+cargo fmt --all -- --check     # Check formatting
+
+# Python bindings
+cd crates/coco-pyo3
+maturin develop --release      # Build + install into active Python env
 ```
 
-## Status
+## Key Architecture Notes
 
-This project is in its initial state — no Cargo.toml or source code exists yet. The repository needs to be bootstrapped with a Cargo manifest and module structure.
+- `coco-pyo3` uses `coco-core` as the dependency alias for `coco-rs` to avoid name collision with the `coco_rs` Python module name
+- Python bindings return plain dicts (not wrapped Rust structs) matching pycocotools conventions
+- Mask operations handle numpy row-major ↔ Rust column-major transposition in the PyO3 layer
+- `cargo build --workspace` will fail at link time for coco-pyo3 (expected — cdylib needs Python). Use `cargo check` instead, or build via maturin.

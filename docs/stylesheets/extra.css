@@ -1,0 +1,13 @@
+/* Always show the left sidebar, even on narrow screens */
+@media screen and (max-width: 76.1875em) {
+  .md-nav--primary .md-nav__title[for="__drawer"] {
+    display: none;
+  }
+  .md-nav--primary > .md-nav__list {
+    display: block;
+  }
+  .md-sidebar--primary {
+    display: block;
+    position: sticky;
+  }
+}
