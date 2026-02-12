@@ -156,6 +156,70 @@ impl PyCOCO {
         Ok(arr.unbind())
     }
 
+    // camelCase aliases for pycocotools compatibility
+    #[pyo3(name = "getAnnIds")]
+    #[pyo3(signature = (img_ids=vec![], cat_ids=vec![], area_rng=None, iscrowd=None))]
+    fn get_ann_ids_camel(
+        &self,
+        img_ids: Vec<u64>,
+        cat_ids: Vec<u64>,
+        area_rng: Option<[f64; 2]>,
+        iscrowd: Option<bool>,
+    ) -> Vec<u64> {
+        self.get_ann_ids(img_ids, cat_ids, area_rng, iscrowd)
+    }
+
+    #[pyo3(name = "getCatIds")]
+    #[pyo3(signature = (cat_nms=vec![], sup_nms=vec![], cat_ids=vec![]))]
+    fn get_cat_ids_camel(
+        &self,
+        cat_nms: Vec<String>,
+        sup_nms: Vec<String>,
+        cat_ids: Vec<u64>,
+    ) -> Vec<u64> {
+        self.get_cat_ids(cat_nms, sup_nms, cat_ids)
+    }
+
+    #[pyo3(name = "getImgIds")]
+    #[pyo3(signature = (img_ids=vec![], cat_ids=vec![]))]
+    fn get_img_ids_camel(&self, img_ids: Vec<u64>, cat_ids: Vec<u64>) -> Vec<u64> {
+        self.get_img_ids(img_ids, cat_ids)
+    }
+
+    #[pyo3(name = "loadAnns")]
+    fn load_anns_camel(&self, py: Python<'_>, ids: Vec<u64>) -> PyResult<PyObject> {
+        self.load_anns(py, ids)
+    }
+
+    #[pyo3(name = "loadCats")]
+    fn load_cats_camel(&self, py: Python<'_>, ids: Vec<u64>) -> PyResult<PyObject> {
+        self.load_cats(py, ids)
+    }
+
+    #[pyo3(name = "loadImgs")]
+    fn load_imgs_camel(&self, py: Python<'_>, ids: Vec<u64>) -> PyResult<PyObject> {
+        self.load_imgs(py, ids)
+    }
+
+    #[pyo3(name = "loadRes")]
+    fn load_res_camel(&self, res_file: &str) -> PyResult<PyCOCO> {
+        self.load_res(res_file)
+    }
+
+    #[pyo3(name = "annToRLE")]
+    fn ann_to_rle_camel(&self, py: Python<'_>, ann: &Bound<'_, PyDict>) -> PyResult<PyObject> {
+        self.ann_to_rle(py, ann)
+    }
+
+    #[pyo3(name = "annToMask")]
+    fn ann_to_mask_camel<'py>(
+        &self,
+        py: Python<'py>,
+        ann: &Bound<'py, PyDict>,
+    ) -> PyResult<Py<PyArray2<u8>>> {
+        self.ann_to_mask(py, ann)
+    }
+
     #[getter]
     fn dataset(&self, py: Python<'_>) -> PyResult<PyObject> {
         let ds = &self.inner.dataset;
@@ -316,6 +380,97 @@ impl PyParams {
     fn set_kpt_oks_sigmas(&mut self, val: Vec<f64>) {
         self.inner.kpt_oks_sigmas = val;
     }
+
+    // camelCase aliases for pycocotools compatibility
+    #[getter(iouType)]
+    fn iou_type_camel(&self) -> &str {
+        self.iou_type()
+    }
+
+    #[setter(iouType)]
+    fn set_iou_type_camel(&mut self, val: &str) -> PyResult<()> {
+        self.set_iou_type(val)
+    }
+
+    #[getter(imgIds)]
+    fn img_ids_camel(&self) -> Vec<u64> {
+        self.img_ids()
+    }
+
+    #[setter(imgIds)]
+    fn set_img_ids_camel(&mut self, val: Vec<u64>) {
+        self.set_img_ids(val);
+    }
+
+    #[getter(catIds)]
+    fn cat_ids_camel(&self) -> Vec<u64> {
+        self.cat_ids()
+    }
+
+    #[setter(catIds)]
+    fn set_cat_ids_camel(&mut self, val: Vec<u64>) {
+        self.set_cat_ids(val);
+    }
+
+    #[getter(iouThrs)]
+    fn iou_thrs_camel(&self) -> Vec<f64> {
+        self.iou_thrs()
+    }
+
+    #[setter(iouThrs)]
+    fn set_iou_thrs_camel(&mut self, val: Vec<f64>) {
+        self.set_iou_thrs(val);
+    }
+
+    #[getter(recThrs)]
+    fn rec_thrs_camel(&self) -> Vec<f64> {
+        self.rec_thrs()
+    }
+
+    #[setter(recThrs)]
+    fn set_rec_thrs_camel(&mut self, val: Vec<f64>) {
+        self.set_rec_thrs(val);
+    }
+
+    #[getter(maxDets)]
+    fn max_dets_camel(&self) -> Vec<usize> {
+        self.max_dets()
+    }
+
+    #[setter(maxDets)]
+    fn set_max_dets_camel(&mut self, val: Vec<usize>) {
+        self.set_max_dets(val);
+    }
+
+    #[getter(areaRng)]
+    fn area_rng_camel(&self) -> Vec<[f64; 2]> {
+        self.area_rng()
+    }
+
+    #[setter(areaRng)]
+    fn set_area_rng_camel(&mut self, val: Vec<[f64; 2]>) {
+        self.set_area_rng(val);
+    }
+
+    #[getter(areaRngLbl)]
+    fn area_rng_lbl_camel(&self) -> Vec<String> {
+        self.area_rng_lbl()
+    }
+
+    #[setter(areaRngLbl)]
+    fn set_area_rng_lbl_camel(&mut self, val: Vec<String>) {
+        self.set_area_rng_lbl(val);
+    }
+
+    #[getter(useCats)]
+    fn use_cats_camel(&self) -> bool {
+        self.use_cats()
+    }
+
+    #[setter(useCats)]
+    fn set_use_cats_camel(&mut self, val: bool) {
+        self.set_use_cats(val);
+    }
 }
 
 fn parse_iou_type(s: &str) -> PyResult<coco_core::IouType> {
@@ -382,11 +537,27 @@ impl PyCOCOeval {
 // Module
 // ---------------------------------------------------------------------------
 
+/// Patch `sys.modules` so that `from pycocotools.coco import COCO` etc.
+/// transparently use coco-rust.
+#[pyfunction]
+fn init_as_pycocotools(py: Python<'_>) -> PyResult<()> {
+    let sys = py.import("sys")?;
+    let modules = sys.getattr("modules")?;
+    let coco_rs = py.import("coco_rs")?;
+    let mask_mod = coco_rs.getattr("mask")?;
+    modules.set_item("pycocotools", &coco_rs)?;
+    modules.set_item("pycocotools.coco", &coco_rs)?;
+    modules.set_item("pycocotools.cocoeval", &coco_rs)?;
+    modules.set_item("pycocotools.mask", &mask_mod)?;
+    Ok(())
+}
+
 #[pymodule]
 fn coco_rs(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCOCO>()?;
     m.add_class::<PyCOCOeval>()?;
     m.add_class::<PyParams>()?;
+    m.add_function(wrap_pyfunction!(init_as_pycocotools, m)?)?;
 
     // mask submodule
     let mask_mod = PyModule::new(py, "mask")?;
