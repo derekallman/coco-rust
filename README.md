@@ -38,6 +38,20 @@ ev.accumulate()
 ev.summarize()
 ```
 
+#### Drop-in replacement for pycocotools
+
+If you have existing code that imports from `pycocotools` and don't want to change every import, call `init_as_pycocotools()` once at startup:
+
+```python
+from coco_rs import init_as_pycocotools
+init_as_pycocotools()
+
+# Existing code works unchanged
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+from pycocotools import mask
+```
+
 ### CLI
 
 ```bash

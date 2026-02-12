@@ -3,7 +3,7 @@
 The `coco_rs` Python module provides a drop-in replacement for pycocotools with the same API conventions. All objects (annotations, images, categories) are returned as plain Python dicts.
 
 !!! tip "Migrating from pycocotools"
-    The only change needed is the import line:
+    **Option 1: Change imports** (recommended for your own code)
 
     ```python
     # Before
@@ -14,7 +14,21 @@ The `coco_rs` Python module provides a drop-in replacement for pycocotools with 
     from coco_rs import COCO, COCOeval
     ```
 
-    Everything else — method names, arguments, return types — stays the same.
+    **Option 2: Zero-code-change drop-in** (useful for third-party libraries)
+
+    Call `init_as_pycocotools()` once at startup and all existing `pycocotools` imports will use coco-rust:
+
+    ```python
+    from coco_rs import init_as_pycocotools
+    init_as_pycocotools()
+
+    # These now use coco-rust — no changes needed in library code
+    from pycocotools.coco import COCO
+    from pycocotools.cocoeval import COCOeval
+    from pycocotools import mask
+    ```
+
+    This patches `sys.modules` so that `pycocotools`, `pycocotools.coco`, `pycocotools.cocoeval`, and `pycocotools.mask` all resolve to `coco_rs`. Both camelCase (`getAnnIds`, `loadRes`, `maxDets`) and snake_case (`get_ann_ids`, `load_res`, `max_dets`) method/property names are supported.
 
 ## End-to-end example
 
@@ -329,3 +343,23 @@ Decode an LEB128 string to an RLE dict.
 ```python
 rle = mask.rle_from_string(s, 100, 100)
 ```
+
+---
+
+## init_as_pycocotools()
+
+Patch `sys.modules` so that `from pycocotools.coco import COCO` and similar imports transparently use coco-rust. Call once at startup before any pycocotools imports.
+
+```python
+from coco_rs import init_as_pycocotools
+init_as_pycocotools()
+```
+
+This registers the following module aliases:
+
+| Import path | Resolves to |
+|-------------|-------------|
+| `pycocotools` | `coco_rs` |
+| `pycocotools.coco` | `coco_rs` |
+| `pycocotools.cocoeval` | `coco_rs` |
+| `pycocotools.mask` | `coco_rs.mask` |
