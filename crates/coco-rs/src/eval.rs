@@ -393,6 +393,7 @@ impl COCOeval {
         let mut gt_order: Vec<usize> = (0..gt_anns.len()).collect();
         gt_order.sort_by_key(|&i| gt_ignore[i] as u8);
         let gt_ignore_sorted: Vec<bool> = gt_order.iter().map(|&i| gt_ignore[i]).collect();
+        let gt_iscrowd_sorted: Vec<bool> = gt_order.iter().map(|&i| gt_anns[i].iscrowd).collect();
         let num_gt_not_ignored = gt_ignore_sorted.iter().filter(|&&x| !x).count();
 
         // Load DT annotations, sort by score descending, limit to max_det
@@ -469,8 +470,9 @@ impl COCOeval {
                     let dt_row = &iou_reordered[di];
 
                     for (gi_sorted, &iou_val) in dt_row.iter().enumerate() {
-                        // Skip already matched non-crowd GTs
-                        if gt_matches[t_idx][gi_sorted] != 0 && !gt_ignore_sorted[gi_sorted] {
+                        // Skip already matched non-crowd GTs (pycocotools uses iscrowd,
+                        // not the full ignore flag, so crowd GTs can be matched multiple times)
+                        if gt_matches[t_idx][gi_sorted] != 0 && !gt_iscrowd_sorted[gi_sorted] {
                             continue;
                         }
 

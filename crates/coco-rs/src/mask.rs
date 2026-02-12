@@ -853,6 +853,48 @@ mod tests {
         );
     }
 
+    /// Regression test: fr_bbox at origin produces counts=[0, ...] which has
+    /// a 0-length initial run. intersection_area and merge_two must use `while`
+    /// (not `if`) to skip these, otherwise IoU computes incorrectly.
+    #[test]
+    fn test_iou_bbox_at_origin() {
+        let r1 = fr_bbox(&[0.0, 0.0, 10.0, 10.0], 20, 20);
+        let r2 = fr_bbox(&[0.0, 0.0, 10.0, 10.0], 20, 20);
+        // Identical masks → IoU = 1.0
+        let ious = iou(&[r1.clone()], &[r2.clone()], &[false]);
+        assert!(
+            (ious[0][0] - 1.0).abs() < 1e-10,
+            "Identical origin bboxes should have IoU=1.0, got {}",
+            ious[0][0]
+        );
+
+        // Partially overlapping at origin
+        let r3 = fr_bbox(&[0.0, 0.0, 5.0, 10.0], 20, 20);
+        let ious2 = iou(&[r3.clone()], &[r1.clone()], &[false]);
+        // intersection = 5*10 = 50, union = 50 + 100 - 50 = 100
+        assert!(
+            (ious2[0][0] - 0.5).abs() < 1e-10,
+            "Origin bbox IoU should be 0.5, got {}",
+            ious2[0][0]
+        );
+
+        // Verify the RLE starts with a 0-count (the bug trigger)
+        assert_eq!(r1.counts[0], 0, "fr_bbox at origin should produce counts starting with 0");
+    }
+
+    /// Regression test: merge of masks at origin (0-length initial runs).
+    #[test]
+    fn test_merge_bbox_at_origin() {
+        let r1 = fr_bbox(&[0.0, 0.0, 10.0, 10.0], 20, 20);
+        let r2 = fr_bbox(&[5.0, 0.0, 10.0, 10.0], 20, 20);
+        // Union area = 15*10 = 150
+        let union = merge(&[r1.clone(), r2.clone()], false);
+        assert_eq!(area(&union), 150, "Union of overlapping origin masks");
+        // Intersection area = 5*10 = 50
+        let inter = merge(&[r1, r2], true);
+        assert_eq!(area(&inter), 50, "Intersection of overlapping origin masks");
+    }
+
     #[test]
     fn test_fr_poly_rect_nonsquare() {
         // 40x40 rectangle in a 200h x 100w image
