@@ -44,15 +44,15 @@ Swap one import line, keep your existing code, and get identical COCO evaluation
 
 ## Performance
 
-Benchmarked on COCO val2017 (5,000 images), Apple M1 MacBook Air:
+Benchmarked on COCO val2017 (5,000 images, 36,781 ground truth annotations, ~43,700 detections), Apple M1 MacBook Air:
 
-| Eval Type | pycocotools | coco-rust | Speedup |
-|-----------|-------------|-----------|---------|
-| bbox      | 13.1s       | 0.81s     | **16.2x** |
-| segm      | 17.1s       | 1.55s     | **11.0x** |
-| keypoints | 4.6s        | 0.18s     | **25.6x** |
+| Eval Type | pycocotools | faster-coco-eval | coco-rust |
+|-----------|-------------|------------------|-----------|
+| bbox      | 11.79s      | 3.47s (3.4x)    | 0.74s (15.9x) |
+| segm      | 19.49s      | 10.52s (1.9x)   | 1.58s (12.3x) |
+| keypoints | 4.79s       | 3.08s (1.6x)    | 0.19s (25.0x) |
 
-All metrics match pycocotools within 0.003 (many are exact).
+Speedups in parentheses are vs pycocotools. All metrics match pycocotools within 0.003 (many are exact).
 
 ## Why coco-rust?
 
