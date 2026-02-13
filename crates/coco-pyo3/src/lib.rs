@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use numpy::{PyArray2, PyArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -530,6 +530,95 @@ impl PyCOCOeval {
     #[getter]
     fn stats(&self) -> Option<Vec<f64>> {
         self.inner.stats.clone()
+    }
+
+    #[getter]
+    fn eval_imgs(&self, py: Python<'_>) -> PyResult<PyObject> {
+        eval_imgs_to_py(py, &self.inner.eval_imgs)
+    }
+
+    #[getter(evalImgs)]
+    fn eval_imgs_camel(&self, py: Python<'_>) -> PyResult<PyObject> {
+        self.eval_imgs(py)
+    }
+
+    #[getter(eval)]
+    fn get_eval(&self, py: Python<'_>) -> PyResult<PyObject> {
+        accumulated_eval_to_py(py, &self.inner.eval)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EvalImg / AccumulatedEval → Python converters
+// ---------------------------------------------------------------------------
+
+fn eval_imgs_to_py(py: Python<'_>, eval_imgs: &[Option<coco_core::EvalImg>]) -> PyResult<PyObject> {
+    let list = PyList::new(
+        py,
+        eval_imgs
+            .iter()
+            .map(|opt| match opt {
+                None => Ok(py.None()),
+                Some(e) => eval_img_to_py(py, e),
+            })
+            .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    Ok(list.into_any().unbind())
+}
+
+fn eval_img_to_py(py: Python<'_>, e: &coco_core::EvalImg) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+    dict.set_item("image_id", e.image_id)?;
+    dict.set_item("category_id", e.category_id)?;
+    dict.set_item("aRng", e.area_rng.to_vec())?;
+    dict.set_item("maxDet", e.max_det)?;
+    dict.set_item("dtIds", e.dt_ids.clone())?;
+    dict.set_item("gtIds", e.gt_ids.clone())?;
+    // dt_matches: Vec<Vec<u64>> [T x D] → list of lists
+    dict.set_item("dtMatches", &e.dt_matches)?;
+    // gt_matches: Vec<Vec<u64>> [T x G] → list of lists
+    dict.set_item("gtMatches", &e.gt_matches)?;
+    dict.set_item("dtScores", e.dt_scores.clone())?;
+    // dt_ignore: Vec<Vec<bool>> [T x D] → list of lists
+    dict.set_item("dtIgnore", &e.dt_ignore)?;
+    dict.set_item("gtIgnore", e.gt_ignore.clone())?;
+    Ok(dict.into_any().unbind())
+}
+
+fn accumulated_eval_to_py(
+    py: Python<'_>,
+    eval: &Option<coco_core::AccumulatedEval>,
+) -> PyResult<PyObject> {
+    match eval {
+        None => Ok(py.None()),
+        Some(e) => {
+            let dict = PyDict::new(py);
+            let counts = vec![e.t, e.r, e.k, e.a, e.m];
+            dict.set_item("counts", counts)?;
+
+            // precision: flat Vec<f64> → numpy array, then reshape to (T, R, K, A, M)
+            let precision = PyArray1::from_vec(py, e.precision.clone());
+            let precision = precision
+                .call_method1("reshape", ((e.t, e.r, e.k, e.a, e.m),))?
+                .unbind();
+            dict.set_item("precision", precision)?;
+
+            // recall: flat Vec<f64> → numpy array, then reshape to (T, K, A, M)
+            let recall = PyArray1::from_vec(py, e.recall.clone());
+            let recall = recall
+                .call_method1("reshape", ((e.t, e.k, e.a, e.m),))?
+                .unbind();
+            dict.set_item("recall", recall)?;
+
+            // scores: flat Vec<f64> → numpy array, then reshape to (T, R, K, A, M)
+            let scores = PyArray1::from_vec(py, e.scores.clone());
+            let scores = scores
+                .call_method1("reshape", ((e.t, e.r, e.k, e.a, e.m),))?
+                .unbind();
+            dict.set_item("scores", scores)?;
+
+            Ok(dict.into_any().unbind())
+        }
     }
 }
 

@@ -13,22 +13,25 @@ use crate::types::Rle;
 
 /// Per-image, per-category evaluation result.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct EvalImg {
-    image_id: u64,
-    category_id: u64,
-    area_rng: [f64; 2],
-    max_det: usize,
+pub struct EvalImg {
+    pub image_id: u64,
+    pub category_id: u64,
+    pub area_rng: [f64; 2],
+    pub max_det: usize,
+    /// Detection annotation IDs (sorted by score descending, truncated to max_det)
+    pub dt_ids: Vec<u64>,
+    /// Ground truth annotation IDs (sorted: non-ignored first, then ignored)
+    pub gt_ids: Vec<u64>,
     /// Detection matches for each IoU threshold: dt_matches[t][d] = matched gt_id or 0
-    dt_matches: Vec<Vec<u64>>,
+    pub dt_matches: Vec<Vec<u64>>,
     /// Ground truth matches for each IoU threshold: gt_matches[t][g] = matched dt_id or 0
-    gt_matches: Vec<Vec<u64>>,
+    pub gt_matches: Vec<Vec<u64>>,
     /// Detection scores
-    dt_scores: Vec<f64>,
+    pub dt_scores: Vec<f64>,
     /// Whether each GT is ignored
-    gt_ignore: Vec<bool>,
+    pub gt_ignore: Vec<bool>,
     /// Whether each detection is ignored per IoU threshold
-    dt_ignore: Vec<Vec<bool>>,
+    pub dt_ignore: Vec<Vec<bool>>,
 }
 
 /// Accumulated evaluation results.
@@ -68,7 +71,7 @@ pub struct COCOeval {
     pub coco_gt: COCO,
     pub coco_dt: COCO,
     pub params: Params,
-    eval_imgs: Vec<Option<EvalImg>>,
+    pub eval_imgs: Vec<Option<EvalImg>>,
     ious: HashMap<(u64, u64), Vec<Vec<f64>>>,
     pub eval: Option<AccumulatedEval>,
     pub stats: Option<Vec<f64>>,
@@ -523,6 +526,8 @@ impl COCOeval {
             category_id: cat_id,
             area_rng,
             max_det,
+            dt_ids: dt_anns.iter().map(|a| a.id).collect(),
+            gt_ids: gt_order.iter().map(|&i| gt_anns[i].id).collect(),
             dt_matches,
             gt_matches,
             dt_scores,
