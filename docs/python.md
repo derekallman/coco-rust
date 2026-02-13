@@ -235,7 +235,7 @@ Params(iou_type="bbox")
 | `max_dets` | `list[int]` | `[1, 10, 100]` | Max detections per image |
 | `area_rng` | `list[[float, float]]` | 4 ranges | Area ranges for small/medium/large |
 | `area_rng_lbl` | `list[str]` | `["all", "small", "medium", "large"]` | Labels for area ranges |
-| `use_cats` | `bool` | `True` | Category-aware evaluation (`False` for class-agnostic) |
+| `use_cats` | `bool` | `True` | Category-aware evaluation (`False` for category-agnostic) |
 | `kpt_oks_sigmas` | `list[float]` | COCO keypoint sigmas | Per-keypoint OKS sigmas |
 
 ---

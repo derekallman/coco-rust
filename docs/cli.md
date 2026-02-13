@@ -26,7 +26,7 @@ This loads ground truth and detection files, runs evaluation, and prints the sta
 | `--img-ids <ids>` | Filter to specific image IDs (comma-separated) | all images |
 | `--cat-ids <ids>` | Filter to specific category IDs (comma-separated) | all categories |
 | `--max-dets <values>` | Max detections per image (comma-separated) | `1,10,100` |
-| `--class-agnostic` | Pool all categories for class-agnostic evaluation | off |
+| `-a`, `--category-agnostic` | Pool all categories for category-agnostic evaluation | off |
 
 ## Examples
 
@@ -70,12 +70,12 @@ coco-eval --gt instances_val2017.json --dt results.json --img-ids 139,285,632
 coco-eval --gt instances_val2017.json --dt results.json --max-dets 1,10,50
 ```
 
-### Class-Agnostic Evaluation
+### Category-Agnostic Evaluation
 
 Pool all categories together (ignores category labels):
 
 ```bash
-coco-eval --gt instances_val2017.json --dt results.json --class-agnostic
+coco-eval --gt instances_val2017.json --dt results.json -a
 ```
 
 ## Output

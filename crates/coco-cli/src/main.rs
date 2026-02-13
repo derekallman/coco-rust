@@ -34,9 +34,9 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     max_dets: Option<Vec<usize>>,
 
-    /// Class-agnostic evaluation (pool all categories)
-    #[arg(long)]
-    class_agnostic: bool,
+    /// Category-agnostic evaluation (pool all categories)
+    #[arg(short = 'a', long)]
+    category_agnostic: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(max_dets) = cli.max_dets {
         coco_eval.params.max_dets = max_dets;
     }
-    if cli.class_agnostic {
+    if cli.category_agnostic {
         coco_eval.params.use_cats = false;
     }
 
