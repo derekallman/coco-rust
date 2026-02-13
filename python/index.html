@@ -1,0 +1,1939 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A drop-in replacement for pycocotools, 11-26x faster.">
+      
+      
+      
+        <link rel="canonical" href="https://derekallman.github.io/coco-rust/python/">
+      
+      
+        <link rel="prev" href="../quickstart/">
+      
+      
+        <link rel="next" href="../cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Python API - coco-rust</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#python-api" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="coco-rust" class="md-header__button md-logo" aria-label="coco-rust" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            coco-rust
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Python API
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/derekallman/coco-rust" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    derekallman/coco-rust
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="coco-rust" class="md-nav__button md-logo" aria-label="coco-rust" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    coco-rust
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/derekallman/coco-rust" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    derekallman/coco-rust
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quickstart/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#end-to-end-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End-to-end example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coco" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COCO
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="COCO">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_ann_idsimg_ids-cat_ids-area_rngnone-iscrowdnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ann_ids(img_ids=[], cat_ids=[], area_rng=None, iscrowd=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_cat_idscat_nms-sup_nms-cat_ids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_cat_ids(cat_nms=[], sup_nms=[], cat_ids=[])
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_img_idsimg_ids-cat_ids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_img_ids(img_ids=[], cat_ids=[])
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_annsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_anns(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_catsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_cats(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_imgsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_imgs(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_resres_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_res(res_file)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ann_to_rleann" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ann_to_rle(ann)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ann_to_maskann" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ann_to_mask(ann)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cocoeval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COCOeval
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="COCOeval">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#evaluate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accumulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        accumulate()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summarize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        summarize()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#params" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Params
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Params">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mask-submodule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask Submodule
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="mask Submodule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#encodemask-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        encode(mask, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decoderle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decode(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arearle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        area(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#to_bboxrle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_bbox(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mergerles-intersectfalse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge(rles, intersect=False)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ioudt-gt-iscrowd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iou(dt, gt, iscrowd)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bbox_ioudt-gt-iscrowd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bbox_iou(dt, gt, iscrowd)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fr_polyxy-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fr_poly(xy, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fr_bboxbb-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fr_bbox(bb, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rle_to_stringrle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rle_to_string(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rle_from_strings-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rle_from_string(s, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init_as_pycocotools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_as_pycocotools()
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rust/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#end-to-end-example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End-to-end example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#coco" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COCO
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="COCO">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_ann_idsimg_ids-cat_ids-area_rngnone-iscrowdnone" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_ann_ids(img_ids=[], cat_ids=[], area_rng=None, iscrowd=None)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_cat_idscat_nms-sup_nms-cat_ids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_cat_ids(cat_nms=[], sup_nms=[], cat_ids=[])
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_img_idsimg_ids-cat_ids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_img_ids(img_ids=[], cat_ids=[])
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_annsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_anns(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_catsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_cats(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_imgsids" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_imgs(ids)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#load_resres_file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_res(res_file)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ann_to_rleann" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ann_to_rle(ann)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ann_to_maskann" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ann_to_mask(ann)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cocoeval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        COCOeval
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="COCOeval">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#evaluate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#accumulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        accumulate()
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#summarize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        summarize()
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#params" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Params
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Params">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#constructor_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constructor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#properties_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Properties
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mask-submodule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mask Submodule
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="mask Submodule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Functions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Functions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#encodemask-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        encode(mask, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#decoderle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        decode(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arearle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        area(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#to_bboxrle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_bbox(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mergerles-intersectfalse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge(rles, intersect=False)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ioudt-gt-iscrowd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        iou(dt, gt, iscrowd)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bbox_ioudt-gt-iscrowd" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        bbox_iou(dt, gt, iscrowd)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fr_polyxy-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fr_poly(xy, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fr_bboxbb-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fr_bbox(bb, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rle_to_stringrle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rle_to_string(rle)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rle_from_strings-h-w" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rle_from_string(s, h, w)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#init_as_pycocotools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        init_as_pycocotools()
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">&para;</a></h1>
+<p>The <code>coco_rs</code> Python module provides a drop-in replacement for pycocotools with the same API conventions. All objects (annotations, images, categories) are returned as plain Python dicts.</p>
+<div class="admonition tip">
+<p class="admonition-title">Migrating from pycocotools</p>
+<p><strong>Option 1: Change imports</strong> (recommended for your own code)</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Before</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pycocotools.coco</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pycocotools.cocoeval</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCOeval</span>
+
+<span class="c1"># After</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span><span class="p">,</span> <span class="n">COCOeval</span>
+</code></pre></div>
+<p><strong>Option 2: Zero-code-change drop-in</strong> (useful for third-party libraries)</p>
+<p>Call <code>init_as_pycocotools()</code> once at startup and all existing <code>pycocotools</code> imports will use coco-rust:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">init_as_pycocotools</span>
+<span class="n">init_as_pycocotools</span><span class="p">()</span>
+
+<span class="c1"># These now use coco-rust — no changes needed in library code</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pycocotools.coco</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pycocotools.cocoeval</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCOeval</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pycocotools</span><span class="w"> </span><span class="kn">import</span> <span class="n">mask</span>
+</code></pre></div>
+<p>This patches <code>sys.modules</code> so that <code>pycocotools</code>, <code>pycocotools.coco</code>, <code>pycocotools.cocoeval</code>, and <code>pycocotools.mask</code> all resolve to <code>coco_rs</code>. Both camelCase (<code>getAnnIds</code>, <code>loadRes</code>, <code>maxDets</code>) and snake_case (<code>get_ann_ids</code>, <code>load_res</code>, <code>max_dets</code>) method/property names are supported.</p>
+</div>
+<h2 id="end-to-end-example">End-to-end example<a class="headerlink" href="#end-to-end-example" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span><span class="p">,</span> <span class="n">COCOeval</span>
+
+<span class="c1"># Load ground truth and detections</span>
+<span class="n">coco_gt</span> <span class="o">=</span> <span class="n">COCO</span><span class="p">(</span><span class="s2">&quot;instances_val2017.json&quot;</span><span class="p">)</span>
+<span class="n">coco_dt</span> <span class="o">=</span> <span class="n">coco_gt</span><span class="o">.</span><span class="n">load_res</span><span class="p">(</span><span class="s2">&quot;bbox_results.json&quot;</span><span class="p">)</span>
+
+<span class="c1"># Run evaluation</span>
+<span class="n">ev</span> <span class="o">=</span> <span class="n">COCOeval</span><span class="p">(</span><span class="n">coco_gt</span><span class="p">,</span> <span class="n">coco_dt</span><span class="p">,</span> <span class="s2">&quot;bbox&quot;</span><span class="p">)</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">evaluate</span><span class="p">()</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">accumulate</span><span class="p">()</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">summarize</span><span class="p">()</span>
+
+<span class="c1"># Access results</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AP @[IoU=0.50:0.95]: </span><span class="si">{</span><span class="n">ev</span><span class="o">.</span><span class="n">stats</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AP @[IoU=0.50]:      </span><span class="si">{</span><span class="n">ev</span><span class="o">.</span><span class="n">stats</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="coco">COCO<a class="headerlink" href="#coco" title="Permanent link">&para;</a></h2>
+<p>Load and query COCO-format datasets.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span>
+
+<span class="n">coco</span> <span class="o">=</span> <span class="n">COCO</span><span class="p">(</span><span class="s2">&quot;instances_val2017.json&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="constructor">Constructor<a class="headerlink" href="#constructor" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">COCO</span><span class="p">(</span><span class="n">annotation_file</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><code>annotation_file</code> — Path to a COCO JSON annotation file. If <code>None</code>, creates an empty dataset.</li>
+</ul>
+<h3 id="properties">Properties<a class="headerlink" href="#properties" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dataset</code></td>
+<td><code>dict</code></td>
+<td>The full dataset with <code>images</code>, <code>annotations</code>, and <code>categories</code> lists</td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods">Methods<a class="headerlink" href="#methods" title="Permanent link">&para;</a></h3>
+<h4 id="get_ann_idsimg_ids-cat_ids-area_rngnone-iscrowdnone"><code>get_ann_ids(img_ids=[], cat_ids=[], area_rng=None, iscrowd=None)</code><a class="headerlink" href="#get_ann_idsimg_ids-cat_ids-area_rngnone-iscrowdnone" title="Permanent link">&para;</a></h4>
+<p>Get annotation IDs matching the given filters.</p>
+<div class="highlight"><pre><span></span><code><span class="n">ann_ids</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">get_ann_ids</span><span class="p">(</span><span class="n">img_ids</span><span class="o">=</span><span class="p">[</span><span class="mi">42</span><span class="p">],</span> <span class="n">cat_ids</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="get_cat_idscat_nms-sup_nms-cat_ids"><code>get_cat_ids(cat_nms=[], sup_nms=[], cat_ids=[])</code><a class="headerlink" href="#get_cat_idscat_nms-sup_nms-cat_ids" title="Permanent link">&para;</a></h4>
+<p>Get category IDs matching the given filters.</p>
+<div class="highlight"><pre><span></span><code><span class="n">cat_ids</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">get_cat_ids</span><span class="p">(</span><span class="n">cat_nms</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;person&quot;</span><span class="p">,</span> <span class="s2">&quot;dog&quot;</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="get_img_idsimg_ids-cat_ids"><code>get_img_ids(img_ids=[], cat_ids=[])</code><a class="headerlink" href="#get_img_idsimg_ids-cat_ids" title="Permanent link">&para;</a></h4>
+<p>Get image IDs matching the given filters.</p>
+<div class="highlight"><pre><span></span><code><span class="n">img_ids</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">get_img_ids</span><span class="p">(</span><span class="n">cat_ids</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="load_annsids"><code>load_anns(ids)</code><a class="headerlink" href="#load_annsids" title="Permanent link">&para;</a></h4>
+<p>Load annotations by their IDs. Returns a list of annotation dicts.</p>
+<div class="highlight"><pre><span></span><code><span class="n">anns</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">load_anns</span><span class="p">([</span><span class="mi">101</span><span class="p">,</span> <span class="mi">102</span><span class="p">,</span> <span class="mi">103</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="load_catsids"><code>load_cats(ids)</code><a class="headerlink" href="#load_catsids" title="Permanent link">&para;</a></h4>
+<p>Load categories by their IDs. Returns a list of category dicts.</p>
+<div class="highlight"><pre><span></span><code><span class="n">cats</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">load_cats</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="load_imgsids"><code>load_imgs(ids)</code><a class="headerlink" href="#load_imgsids" title="Permanent link">&para;</a></h4>
+<p>Load images by their IDs. Returns a list of image dicts.</p>
+<div class="highlight"><pre><span></span><code><span class="n">imgs</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">load_imgs</span><span class="p">([</span><span class="mi">42</span><span class="p">])</span>
+</code></pre></div>
+<h4 id="load_resres_file"><code>load_res(res_file)</code><a class="headerlink" href="#load_resres_file" title="Permanent link">&para;</a></h4>
+<p>Load detection results from a JSON file. Returns a new <code>COCO</code> object.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p><code>load_res</code> automatically computes missing fields: <code>area</code> from bounding boxes or segmentation masks, and polygon segmentations from bbox results. This matches pycocotools behavior.</p>
+</div>
+<div class="highlight"><pre><span></span><code><span class="n">coco_dt</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">load_res</span><span class="p">(</span><span class="s2">&quot;detections.json&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="ann_to_rleann"><code>ann_to_rle(ann)</code><a class="headerlink" href="#ann_to_rleann" title="Permanent link">&para;</a></h4>
+<p>Convert an annotation dict to RLE format. Returns an RLE dict with <code>counts</code> (string) and <code>size</code> [h, w].</p>
+<div class="highlight"><pre><span></span><code><span class="n">rle</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">ann_to_rle</span><span class="p">(</span><span class="n">ann</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="ann_to_maskann"><code>ann_to_mask(ann)</code><a class="headerlink" href="#ann_to_maskann" title="Permanent link">&para;</a></h4>
+<p>Convert an annotation dict to a binary mask. Returns a numpy array of shape (h, w).</p>
+<div class="highlight"><pre><span></span><code><span class="n">mask</span> <span class="o">=</span> <span class="n">coco</span><span class="o">.</span><span class="n">ann_to_mask</span><span class="p">(</span><span class="n">ann</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="cocoeval">COCOeval<a class="headerlink" href="#cocoeval" title="Permanent link">&para;</a></h2>
+<p>Run COCO evaluation to compute AP/AR metrics.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">COCO</span><span class="p">,</span> <span class="n">COCOeval</span>
+
+<span class="n">coco_gt</span> <span class="o">=</span> <span class="n">COCO</span><span class="p">(</span><span class="s2">&quot;instances_val2017.json&quot;</span><span class="p">)</span>
+<span class="n">coco_dt</span> <span class="o">=</span> <span class="n">coco_gt</span><span class="o">.</span><span class="n">load_res</span><span class="p">(</span><span class="s2">&quot;detections.json&quot;</span><span class="p">)</span>
+
+<span class="n">ev</span> <span class="o">=</span> <span class="n">COCOeval</span><span class="p">(</span><span class="n">coco_gt</span><span class="p">,</span> <span class="n">coco_dt</span><span class="p">,</span> <span class="s2">&quot;bbox&quot;</span><span class="p">)</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">evaluate</span><span class="p">()</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">accumulate</span><span class="p">()</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">summarize</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">ev</span><span class="o">.</span><span class="n">stats</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="constructor_1">Constructor<a class="headerlink" href="#constructor_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">COCOeval</span><span class="p">(</span><span class="n">coco_gt</span><span class="p">,</span> <span class="n">coco_dt</span><span class="p">,</span> <span class="n">iou_type</span><span class="p">)</span>
+</code></pre></div>
+<ul>
+<li><code>coco_gt</code> — Ground truth <code>COCO</code> object</li>
+<li><code>coco_dt</code> — Detections <code>COCO</code> object (from <code>load_res</code>)</li>
+<li><code>iou_type</code> — <code>"bbox"</code>, <code>"segm"</code>, or <code>"keypoints"</code></li>
+</ul>
+<h3 id="properties_1">Properties<a class="headerlink" href="#properties_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>params</code></td>
+<td><code>Params</code></td>
+<td>Evaluation parameters (read/write)</td>
+</tr>
+<tr>
+<td><code>stats</code></td>
+<td><code>list[float]</code> or <code>None</code></td>
+<td>Result metrics after <code>summarize()</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="methods_1">Methods<a class="headerlink" href="#methods_1" title="Permanent link">&para;</a></h3>
+<h4 id="evaluate"><code>evaluate()</code><a class="headerlink" href="#evaluate" title="Permanent link">&para;</a></h4>
+<p>Run per-image evaluation. Must be called before <code>accumulate()</code>.</p>
+<h4 id="accumulate"><code>accumulate()</code><a class="headerlink" href="#accumulate" title="Permanent link">&para;</a></h4>
+<p>Accumulate per-image results into summary metrics.</p>
+<h4 id="summarize"><code>summarize()</code><a class="headerlink" href="#summarize" title="Permanent link">&para;</a></h4>
+<p>Print and compute the standard 12 COCO metrics (10 for keypoints). Populates <code>stats</code>.</p>
+<hr />
+<h2 id="params">Params<a class="headerlink" href="#params" title="Permanent link">&para;</a></h2>
+<p>Evaluation parameters. Created automatically by <code>COCOeval</code>, but can be modified before calling <code>evaluate()</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">ev</span> <span class="o">=</span> <span class="n">COCOeval</span><span class="p">(</span><span class="n">coco_gt</span><span class="p">,</span> <span class="n">coco_dt</span><span class="p">,</span> <span class="s2">&quot;bbox&quot;</span><span class="p">)</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">max_dets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">100</span><span class="p">]</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">area_rng</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10000000000</span><span class="p">]]</span>
+<span class="n">ev</span><span class="o">.</span><span class="n">params</span><span class="o">.</span><span class="n">area_rng_lbl</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">]</span>
+</code></pre></div>
+<h3 id="constructor_2">Constructor<a class="headerlink" href="#constructor_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="n">Params</span><span class="p">(</span><span class="n">iou_type</span><span class="o">=</span><span class="s2">&quot;bbox&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="properties_2">Properties<a class="headerlink" href="#properties_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>iou_type</code></td>
+<td><code>str</code></td>
+<td><code>"bbox"</code></td>
+<td>Evaluation type</td>
+</tr>
+<tr>
+<td><code>img_ids</code></td>
+<td><code>list[int]</code></td>
+<td><code>[]</code></td>
+<td>Image IDs to evaluate (empty = all)</td>
+</tr>
+<tr>
+<td><code>cat_ids</code></td>
+<td><code>list[int]</code></td>
+<td><code>[]</code></td>
+<td>Category IDs to evaluate (empty = all)</td>
+</tr>
+<tr>
+<td><code>iou_thrs</code></td>
+<td><code>list[float]</code></td>
+<td><code>[0.5, 0.55, ..., 0.95]</code></td>
+<td>IoU thresholds</td>
+</tr>
+<tr>
+<td><code>rec_thrs</code></td>
+<td><code>list[float]</code></td>
+<td><code>[0.0, 0.01, ..., 1.0]</code></td>
+<td>Recall thresholds for interpolation</td>
+</tr>
+<tr>
+<td><code>max_dets</code></td>
+<td><code>list[int]</code></td>
+<td><code>[1, 10, 100]</code></td>
+<td>Max detections per image</td>
+</tr>
+<tr>
+<td><code>area_rng</code></td>
+<td><code>list[[float, float]]</code></td>
+<td>4 ranges</td>
+<td>Area ranges for small/medium/large</td>
+</tr>
+<tr>
+<td><code>area_rng_lbl</code></td>
+<td><code>list[str]</code></td>
+<td><code>["all", "small", "medium", "large"]</code></td>
+<td>Labels for area ranges</td>
+</tr>
+<tr>
+<td><code>use_cats</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td>Category-aware evaluation (<code>False</code> for category-agnostic)</td>
+</tr>
+<tr>
+<td><code>kpt_oks_sigmas</code></td>
+<td><code>list[float]</code></td>
+<td>COCO keypoint sigmas</td>
+<td>Per-keypoint OKS sigmas</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="mask-submodule">mask Submodule<a class="headerlink" href="#mask-submodule" title="Permanent link">&para;</a></h2>
+<p>Low-level mask operations. Access via <code>coco_rs.mask</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">mask</span>
+</code></pre></div>
+<h3 id="functions">Functions<a class="headerlink" href="#functions" title="Permanent link">&para;</a></h3>
+<h4 id="encodemask-h-w"><code>encode(mask, h, w)</code><a class="headerlink" href="#encodemask-h-w" title="Permanent link">&para;</a></h4>
+<p>Encode a binary mask (numpy uint8 array of shape h x w) to RLE.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">mask</span>
+
+<span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+<span class="n">m</span><span class="p">[</span><span class="mi">10</span><span class="p">:</span><span class="mi">50</span><span class="p">,</span> <span class="mi">20</span><span class="p">:</span><span class="mi">80</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">rle</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="decoderle"><code>decode(rle)</code><a class="headerlink" href="#decoderle" title="Permanent link">&para;</a></h4>
+<p>Decode an RLE dict to a binary mask. Returns a numpy uint8 array of shape (h, w).</p>
+<div class="highlight"><pre><span></span><code><span class="n">m</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">rle</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="arearle"><code>area(rle)</code><a class="headerlink" href="#arearle" title="Permanent link">&para;</a></h4>
+<p>Compute the area (number of foreground pixels) of an RLE mask.</p>
+<div class="highlight"><pre><span></span><code><span class="n">a</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">area</span><span class="p">(</span><span class="n">rle</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="to_bboxrle"><code>to_bbox(rle)</code><a class="headerlink" href="#to_bboxrle" title="Permanent link">&para;</a></h4>
+<p>Convert an RLE mask to a bounding box <code>[x, y, w, h]</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">bbox</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">to_bbox</span><span class="p">(</span><span class="n">rle</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="mergerles-intersectfalse"><code>merge(rles, intersect=False)</code><a class="headerlink" href="#mergerles-intersectfalse" title="Permanent link">&para;</a></h4>
+<p>Merge multiple RLE masks. Union by default, intersection if <code>intersect=True</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">merged</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">merge</span><span class="p">([</span><span class="n">rle1</span><span class="p">,</span> <span class="n">rle2</span><span class="p">])</span>
+<span class="n">intersected</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">merge</span><span class="p">([</span><span class="n">rle1</span><span class="p">,</span> <span class="n">rle2</span><span class="p">],</span> <span class="n">intersect</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="ioudt-gt-iscrowd"><code>iou(dt, gt, iscrowd)</code><a class="headerlink" href="#ioudt-gt-iscrowd" title="Permanent link">&para;</a></h4>
+<p>Compute pairwise IoU between two lists of RLE masks. Returns a 2D list of shape (len(dt), len(gt)).</p>
+<div class="highlight"><pre><span></span><code><span class="n">ious</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">iou</span><span class="p">(</span><span class="n">dt_rles</span><span class="p">,</span> <span class="n">gt_rles</span><span class="p">,</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">gt_rles</span><span class="p">))</span>
+</code></pre></div>
+<h4 id="bbox_ioudt-gt-iscrowd"><code>bbox_iou(dt, gt, iscrowd)</code><a class="headerlink" href="#bbox_ioudt-gt-iscrowd" title="Permanent link">&para;</a></h4>
+<p>Compute pairwise IoU between two lists of bounding boxes <code>[x, y, w, h]</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">ious</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">bbox_iou</span><span class="p">(</span><span class="n">dt_boxes</span><span class="p">,</span> <span class="n">gt_boxes</span><span class="p">,</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">gt_boxes</span><span class="p">))</span>
+</code></pre></div>
+<h4 id="fr_polyxy-h-w"><code>fr_poly(xy, h, w)</code><a class="headerlink" href="#fr_polyxy-h-w" title="Permanent link">&para;</a></h4>
+<p>Rasterize a polygon to an RLE mask. <code>xy</code> is a flat list of [x1, y1, x2, y2, ...] coordinates.</p>
+<div class="highlight"><pre><span></span><code><span class="n">rle</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">fr_poly</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">50</span><span class="p">],</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="fr_bboxbb-h-w"><code>fr_bbox(bb, h, w)</code><a class="headerlink" href="#fr_bboxbb-h-w" title="Permanent link">&para;</a></h4>
+<p>Convert a bounding box <code>[x, y, w, h]</code> to an RLE mask.</p>
+<div class="highlight"><pre><span></span><code><span class="n">rle</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">fr_bbox</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">40</span><span class="p">],</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="rle_to_stringrle"><code>rle_to_string(rle)</code><a class="headerlink" href="#rle_to_stringrle" title="Permanent link">&para;</a></h4>
+<p>Encode an RLE to its LEB128 string representation.</p>
+<div class="highlight"><pre><span></span><code><span class="n">s</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">rle_to_string</span><span class="p">(</span><span class="n">rle</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="rle_from_strings-h-w"><code>rle_from_string(s, h, w)</code><a class="headerlink" href="#rle_from_strings-h-w" title="Permanent link">&para;</a></h4>
+<p>Decode an LEB128 string to an RLE dict.</p>
+<div class="highlight"><pre><span></span><code><span class="n">rle</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">rle_from_string</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="init_as_pycocotools">init_as_pycocotools()<a class="headerlink" href="#init_as_pycocotools" title="Permanent link">&para;</a></h2>
+<p>Patch <code>sys.modules</code> so that <code>from pycocotools.coco import COCO</code> and similar imports transparently use coco-rust. Call once at startup before any pycocotools imports.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">coco_rs</span><span class="w"> </span><span class="kn">import</span> <span class="n">init_as_pycocotools</span>
+<span class="n">init_as_pycocotools</span><span class="p">()</span>
+</code></pre></div>
+<p>This registers the following module aliases:</p>
+<table>
+<thead>
+<tr>
+<th>Import path</th>
+<th>Resolves to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pycocotools</code></td>
+<td><code>coco_rs</code></td>
+</tr>
+<tr>
+<td><code>pycocotools.coco</code></td>
+<td><code>coco_rs</code></td>
+</tr>
+<tr>
+<td><code>pycocotools.cocoeval</code></td>
+<td><code>coco_rs</code></td>
+</tr>
+<tr>
+<td><code>pycocotools.mask</code></td>
+<td><code>coco_rs.mask</code></td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../quickstart/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Quick Start">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Quick Start
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../cli/" class="md-footer__link md-footer__link--next" aria-label="Next: CLI Reference">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                CLI Reference
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.tabs.link", "navigation.instant", "navigation.sections", "navigation.expand", "navigation.footer", "navigation.top", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
