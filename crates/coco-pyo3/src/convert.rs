@@ -168,7 +168,8 @@ pub fn py_to_rle(dict: &Bound<'_, PyDict>) -> PyResult<Rle> {
         let size: [u32; 2] = size_obj.extract()?;
         let counts_obj = dict.get_item("counts")?.unwrap();
         if let Ok(s) = counts_obj.extract::<String>() {
-            return Ok(coco_core::mask::rle_from_string(&s, size[0], size[1]));
+            return coco_core::mask::rle_from_string(&s, size[0], size[1])
+                .map_err(pyo3::exceptions::PyValueError::new_err);
         }
         let counts: Vec<u32> = counts_obj.extract()?;
         return Ok(Rle {

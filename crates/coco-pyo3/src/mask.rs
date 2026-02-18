@@ -104,6 +104,6 @@ pub fn rle_to_string(rle: &Bound<'_, PyDict>) -> PyResult<String> {
 
 #[pyfunction]
 pub fn rle_from_string(py: Python<'_>, s: &str, h: u32, w: u32) -> PyResult<PyObject> {
-    let rle = rmask::rle_from_string(s, h, w);
+    let rle = rmask::rle_from_string(s, h, w).map_err(pyo3::exceptions::PyValueError::new_err)?;
     rle_to_py(py, &rle)
 }

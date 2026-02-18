@@ -251,7 +251,11 @@ fn test_area_ignored_gt_does_not_absorb_multiple_detections() {
         .map(|r| {
             let idx = eval.precision_idx(0, r, 0, 0, m_idx);
             let p = eval.precision[idx];
-            if p < 0.0 { 0.0 } else { p }
+            if p < 0.0 {
+                0.0
+            } else {
+                p
+            }
         })
         .sum();
     let ap = ap_sum / eval.r as f64;
@@ -261,8 +265,5 @@ fn test_area_ignored_gt_does_not_absorb_multiple_detections() {
         "AP should be ~0.5 (with FP counted), got {ap:.4}. \
          If AP ≈ 1.0, area-ignored non-crowd GT is incorrectly absorbing multiple detections."
     );
-    assert!(
-        ap > 0.3,
-        "AP should be ~0.5, got {ap:.4}"
-    );
+    assert!(ap > 0.3, "AP should be ~0.5, got {ap:.4}");
 }

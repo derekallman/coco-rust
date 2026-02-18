@@ -42,11 +42,11 @@ pub fn decode(rle: &Rle) -> Vec<u8> {
     let mut v = 0u8;
     for &c in &rle.counts {
         let c = c as usize;
-        let end = (idx + c).min(n);
+        let end = (idx.saturating_add(c)).min(n);
         for slot in &mut mask[idx..end] {
             *slot = v;
         }
-        idx += c;
+        idx = end;
         v = 1 - v;
     }
     mask
@@ -582,40 +582,31 @@ pub fn fr_bbox(bb: &[f64; 4], h: u32, w: u32) -> Rle {
 
 /// Compress an RLE into the LEB128-like string format used by COCO.
 ///
-/// This matches the `rleToString` function in maskApi.c exactly.
+/// This matches the `rleToString` function in maskApi.c exactly,
+/// including delta encoding for indices > 2 (stride-2 differencing).
 pub fn rle_to_string(rle: &Rle) -> String {
     let mut s = String::new();
-    for &cnt in &rle.counts {
-        rle_encode_count(&mut s, cnt);
+    for (i, &cnt) in rle.counts.iter().enumerate() {
+        // maskApi.c: x = (long) cnts[i]; if(i>2) x -= (long) cnts[i-2];
+        let x = if i > 2 {
+            (cnt as i64).wrapping_sub(rle.counts[i - 2] as i64)
+        } else {
+            cnt as i64
+        };
+        rle_encode_i64(&mut s, x);
     }
     s
 }
 
-/// Encode a single count value to the COCO LEB128-like format.
-fn rle_encode_count(s: &mut String, x: u32) {
-    // The encoding works by:
-    // 1. If count > 0, encode the value in a modified unsigned LEB128 scheme
-    //    using 5-bit groups, with bit 5 as "more" flag, offset by 48.
-    // Actually the C code uses a signed scheme. Let me match it exactly.
-    //
-    // From maskApi.c rleToString:
-    //   for( i=0; i<m; i++ ) {
-    //     x = (uint) cnts[i]; if(i>2) x-=(uint) cnts[i-1];
-    //     more = 1; while( more ) {
-    //       c=x & 0x1f; x>>=5; more=(c & 0x10) ? x!=-1 : x!=0;
-    //       if(more) c|=0x20; c+=48; *s++=c; }
-    //   }
-    //
-    // Wait - in the C code, cnts are signed (they use delta encoding for some formats).
-    // But in rleToString, each count is encoded independently (no delta).
-    // The x is cast to uint, then encoded with the LEB128-like scheme.
-    //
-    // Let me re-read: actually the C code does NOT apply delta in rleToString.
-    // It encodes each count directly. But the sign-extension logic is for handling
-    // large uint values properly.
-
-    // Cast to i64 for sign-extension behavior matching C's uint->int conversion
-    let mut x = x as i64;
+/// Encode a single (possibly negative) value to the COCO LEB128-like format.
+///
+/// From maskApi.c `rleToString`:
+/// ```c
+/// c = x & 0x1f; x >>= 5;
+/// more = (c & 0x10) ? x != -1 : x != 0;
+/// if(more) c |= 0x20; c += 48; *s++ = c;
+/// ```
+fn rle_encode_i64(s: &mut String, mut x: i64) {
     loop {
         let c = (x & 0x1f) as u8;
         x >>= 5;
@@ -634,8 +625,11 @@ fn rle_encode_count(s: &mut String, x: u32) {
 
 /// Decompress a COCO LEB128-like string back to an RLE.
 ///
-/// Matches `rleFrString` from maskApi.c.
-pub fn rle_from_string(s: &str, h: u32, w: u32) -> Rle {
+/// Matches `rleFrString` from maskApi.c, including stride-2 delta
+/// accumulation for indices > 2.
+///
+/// Returns an error if the decoded counts sum exceeds `h * w`.
+pub fn rle_from_string(s: &str, h: u32, w: u32) -> Result<Rle, String> {
     let bytes = s.as_bytes();
     let mut counts = Vec::new();
     let mut i = 0;
@@ -655,10 +649,21 @@ pub fn rle_from_string(s: &str, h: u32, w: u32) -> Rle {
         if shift > 0 && (x & (1 << (shift - 1))) != 0 {
             x |= !0i64 << shift;
         }
+        // maskApi.c rleFrString: if(m>2) x += (long) cnts[m-2];
+        if counts.len() > 2 {
+            x = x.wrapping_add(counts[counts.len() - 2] as i64);
+        }
         counts.push(x as u32);
     }
 
-    Rle { h, w, counts }
+    // Validate total counts don't exceed h*w
+    let total: u64 = counts.iter().map(|&c| c as u64).sum();
+    let hw = h as u64 * w as u64;
+    if total > hw {
+        return Err(format!("invalid RLE: total counts {total} exceed h*w={hw}"));
+    }
+
+    Ok(Rle { h, w, counts })
 }
 
 /// Convert multiple polygons for a single object to a single merged RLE.
@@ -777,7 +782,7 @@ mod tests {
             counts: vec![5, 3, 92],
         };
         let s = rle_to_string(&rle);
-        let decoded = rle_from_string(&s, 10, 10);
+        let decoded = rle_from_string(&s, 10, 10).unwrap();
         assert_eq!(rle.counts, decoded.counts);
     }
 
@@ -789,8 +794,67 @@ mod tests {
             counts: vec![100, 200, 9700],
         };
         let s = rle_to_string(&rle);
-        let decoded = rle_from_string(&s, 100, 100);
+        let decoded = rle_from_string(&s, 100, 100).unwrap();
         assert_eq!(rle.counts, decoded.counts);
+    }
+
+    #[test]
+    fn test_rle_string_zero_leading() {
+        // Matches ppwwyyxx/cocoapi testZeroLeadingRLE:
+        // An RLE starting with 0 (foreground at pixel 0) should roundtrip.
+        let rle = Rle {
+            h: 5,
+            w: 5,
+            counts: vec![0, 3, 22],
+        };
+        let s = rle_to_string(&rle);
+        let decoded = rle_from_string(&s, 5, 5).unwrap();
+        assert_eq!(rle.counts, decoded.counts);
+        let mask = decode(&decoded);
+        assert_eq!(mask[0], 1);
+        assert_eq!(mask[1], 1);
+        assert_eq!(mask[2], 1);
+        assert_eq!(mask[3], 0);
+    }
+
+    #[test]
+    fn test_rle_string_delta_encoding() {
+        // Test that delta encoding works with many runs (i > 2 triggers delta).
+        let rle = Rle {
+            h: 100,
+            w: 100,
+            counts: vec![10, 20, 30, 40, 50, 60, 9790],
+        };
+        let s = rle_to_string(&rle);
+        let decoded = rle_from_string(&s, 100, 100).unwrap();
+        assert_eq!(rle.counts, decoded.counts);
+    }
+
+    #[test]
+    fn test_rle_string_invalid_counts() {
+        // Matches ppwwyyxx/cocoapi testInvalidRLECounts:
+        // RLE counts exceeding h*w should return an error, not panic.
+        let rle = Rle {
+            h: 5,
+            w: 5,
+            counts: vec![10, 20], // sum=30 > 25
+        };
+        let s = rle_to_string(&rle);
+        assert!(rle_from_string(&s, 5, 5).is_err());
+    }
+
+    #[test]
+    fn test_decode_overflow_counts() {
+        // Decode should not panic even if counts exceed h*w.
+        let rle = Rle {
+            h: 2,
+            w: 2,
+            counts: vec![3, 5], // sum=8 > 4
+        };
+        let mask = decode(&rle);
+        assert_eq!(mask.len(), 4);
+        // First 3 should be 0, but only 4 pixels total, so clamped
+        assert_eq!(mask, vec![0, 0, 0, 1]);
     }
 
     #[test]
@@ -879,7 +943,10 @@ mod tests {
         );
 
         // Verify the RLE starts with a 0-count (the bug trigger)
-        assert_eq!(r1.counts[0], 0, "fr_bbox at origin should produce counts starting with 0");
+        assert_eq!(
+            r1.counts[0], 0,
+            "fr_bbox at origin should produce counts starting with 0"
+        );
     }
 
     /// Regression test: merge of masks at origin (0-length initial runs).

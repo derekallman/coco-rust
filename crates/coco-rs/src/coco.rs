@@ -367,7 +367,7 @@ impl COCO {
         match &ann.segmentation {
             Some(Segmentation::Polygon(polys)) => Some(mask::fr_polys(polys, h, w)),
             Some(Segmentation::CompressedRle { size, counts }) => {
-                Some(mask::rle_from_string(counts, size[0], size[1]))
+                mask::rle_from_string(counts, size[0], size[1]).ok()
             }
             Some(Segmentation::UncompressedRle { size, counts }) => Some(Rle {
                 h: size[0],

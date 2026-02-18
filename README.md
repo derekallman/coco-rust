@@ -1,6 +1,6 @@
 # coco-rust
 
-A drop-in replacement for [pycocotools](https://github.com/cocodataset/cocoapi/tree/master/PythonAPI/pycocotools) — 11-26x faster COCO evaluation for object detection, segmentation, and keypoints.
+A drop-in replacement for [pycocotools](https://github.com/ppwwyyxx/cocoapi) — 11-26x faster COCO evaluation for object detection, segmentation, and keypoints.
 
 Available as a **Python package**, **CLI tool**, and **Rust library**.
 
