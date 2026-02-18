@@ -26,6 +26,10 @@ pub struct EvalImg {
     pub dt_matches: Vec<Vec<u64>>,
     /// Ground truth matches for each IoU threshold: gt_matches[t][g] = matched dt_id or 0
     pub gt_matches: Vec<Vec<u64>>,
+    /// Whether each detection is matched per IoU threshold (reliable for id=0)
+    pub dt_matched: Vec<Vec<bool>>,
+    /// Whether each GT is matched per IoU threshold (reliable for id=0)
+    pub gt_matched: Vec<Vec<bool>>,
     /// Detection scores
     pub dt_scores: Vec<f64>,
     /// Whether each GT is ignored
@@ -114,7 +118,7 @@ impl COCOeval {
         let cat_ids = if self.params.use_cats {
             self.params.cat_ids.clone()
         } else {
-            vec![0] // dummy single category
+            vec![u64::MAX] // dummy single category (avoids collision with real category_id=0)
         };
 
         // Compute IoUs for all (image, category) pairs in parallel
@@ -434,6 +438,8 @@ impl COCOeval {
 
         let mut dt_matches = vec![vec![0u64; d]; num_iou_thrs];
         let mut gt_matches = vec![vec![0u64; g]; num_iou_thrs];
+        let mut dt_matched = vec![vec![false; d]; num_iou_thrs];
+        let mut gt_matched = vec![vec![false; g]; num_iou_thrs];
         let mut dt_ignore_flags = vec![vec![false; d]; num_iou_thrs];
 
         if let Some(iou_mat) = iou_matrix {
@@ -475,7 +481,7 @@ impl COCOeval {
                     for (gi_sorted, &iou_val) in dt_row.iter().enumerate() {
                         // Skip already matched non-crowd GTs (pycocotools uses iscrowd,
                         // not the full ignore flag, so crowd GTs can be matched multiple times)
-                        if gt_matches[t_idx][gi_sorted] != 0 && !gt_iscrowd_sorted[gi_sorted] {
+                        if gt_matched[t_idx][gi_sorted] && !gt_iscrowd_sorted[gi_sorted] {
                             continue;
                         }
 
@@ -500,6 +506,8 @@ impl COCOeval {
                     if let Some(gi) = best_gi {
                         dt_matches[t_idx][di] = gt_anns[gt_order[gi]].id;
                         gt_matches[t_idx][gi] = dt_ann.id;
+                        dt_matched[t_idx][di] = true;
+                        gt_matched[t_idx][gi] = true;
 
                         // DT is ignored if matched to ignored GT
                         dt_ignore_flags[t_idx][di] = gt_ignore_sorted[gi];
@@ -530,6 +538,8 @@ impl COCOeval {
             gt_ids: gt_order.iter().map(|&i| gt_anns[i].id).collect(),
             dt_matches,
             gt_matches,
+            dt_matched,
+            gt_matched,
             dt_scores,
             gt_ignore: gt_ignore_sorted,
             dt_ignore: dt_ignore_flags,
@@ -582,7 +592,7 @@ impl COCOeval {
                 let k_actual = if self.params.use_cats { k_idx } else { 0 };
 
                 let mut all_dt_scores: Vec<f64> = Vec::new();
-                let mut all_dt_matches: Vec<Vec<u64>> = vec![Vec::new(); t];
+                let mut all_dt_matched: Vec<Vec<bool>> = vec![Vec::new(); t];
                 let mut all_dt_ignore: Vec<Vec<bool>> = vec![Vec::new(); t];
                 let mut num_gt = 0usize;
 
@@ -600,7 +610,7 @@ impl COCOeval {
 
                     all_dt_scores.extend_from_slice(&eval_img.dt_scores[..nd]);
                     for t_idx in 0..t {
-                        all_dt_matches[t_idx].extend_from_slice(&eval_img.dt_matches[t_idx][..nd]);
+                        all_dt_matched[t_idx].extend_from_slice(&eval_img.dt_matched[t_idx][..nd]);
                         all_dt_ignore[t_idx].extend_from_slice(&eval_img.dt_ignore[t_idx][..nd]);
                     }
 
@@ -657,7 +667,7 @@ impl COCOeval {
                         if all_dt_ignore[t_idx][src_idx] {
                             tp[out_idx] = 0.0;
                             fp[out_idx] = 0.0;
-                        } else if all_dt_matches[t_idx][src_idx] != 0 {
+                        } else if all_dt_matched[t_idx][src_idx] {
                             tp[out_idx] = 1.0;
                             fp[out_idx] = 0.0;
                         } else {

@@ -446,3 +446,50 @@ fn test_crowd_rematching() {
          but some are non-negative — crowd re-matching may be broken"
     );
 }
+
+/// Test that 0-based annotation/image/category IDs work correctly.
+/// Previously, `dt_matches`/`gt_matches` used 0 as the "unmatched" sentinel,
+/// so a valid match to annotation id=0 was treated as unmatched → false positive.
+#[test]
+fn test_zero_based_ids() {
+    let gt_path = fixtures_dir().join("zero_gt.json");
+    let dt_path = fixtures_dir().join("zero_dt.json");
+    let coco_gt = COCO::new(&gt_path).expect("Failed to load zero GT");
+    let coco_dt = coco_gt.load_res(&dt_path).expect("Failed to load zero DT");
+
+    let stats = run_bbox_eval(coco_gt, coco_dt);
+
+    // Perfect detections for all 3 GTs → AP and AR should be 1.0
+    let ap = stats[0]; // AP @[ IoU=0.50:0.95 | area=all | maxDets=100 ]
+    let ap50 = stats[1]; // AP @[ IoU=0.50 | area=all | maxDets=100 ]
+    let ar100 = stats[8]; // AR @[ IoU=0.50:0.95 | area=all | maxDets=100 ]
+    assert!(
+        (ap - 1.0).abs() < 1e-6,
+        "AP should be 1.0 for perfect detections with 0-based IDs, got {ap:.6}"
+    );
+    assert!(
+        (ap50 - 1.0).abs() < 1e-6,
+        "AP@0.5 should be 1.0, got {ap50:.6}"
+    );
+    assert!(
+        (ar100 - 1.0).abs() < 1e-6,
+        "AR@100 should be 1.0, got {ar100:.6}"
+    );
+}
+
+/// Test that `load_res` unconditionally reassigns annotation IDs.
+#[test]
+fn test_zero_based_ids_load_res() {
+    let gt_path = fixtures_dir().join("zero_gt.json");
+    let dt_path = fixtures_dir().join("zero_dt.json");
+    let coco_gt = COCO::new(&gt_path).expect("Failed to load zero GT");
+    let coco_dt = coco_gt.load_res(&dt_path).expect("Failed to load zero DT");
+
+    // load_res should assign IDs 1, 2, 3 unconditionally
+    let ids: Vec<u64> = coco_dt.dataset.annotations.iter().map(|a| a.id).collect();
+    assert_eq!(
+        ids,
+        vec![1, 2, 3],
+        "load_res should assign 1-indexed IDs unconditionally"
+    );
+}

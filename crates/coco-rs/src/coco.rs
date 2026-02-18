@@ -348,11 +348,9 @@ impl COCO {
             }
         }
 
-        // Assign IDs to result annotations (1-indexed)
+        // Assign IDs to result annotations (1-indexed, unconditional like pycocotools)
         for (i, ann) in dataset.annotations.iter_mut().enumerate() {
-            if ann.id == 0 {
-                ann.id = (i + 1) as u64;
-            }
+            ann.id = (i + 1) as u64;
         }
 
         Ok(COCO::from_dataset(dataset))

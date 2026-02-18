@@ -578,6 +578,9 @@ fn eval_img_to_py(py: Python<'_>, e: &coco_core::EvalImg) -> PyResult<PyObject> 
     dict.set_item("dtMatches", &e.dt_matches)?;
     // gt_matches: Vec<Vec<u64>> [T x G] → list of lists
     dict.set_item("gtMatches", &e.gt_matches)?;
+    // dt_matched / gt_matched: Vec<Vec<bool>> [T x D/G] → list of lists
+    dict.set_item("dtMatched", &e.dt_matched)?;
+    dict.set_item("gtMatched", &e.gt_matched)?;
     dict.set_item("dtScores", e.dt_scores.clone())?;
     // dt_ignore: Vec<Vec<bool>> [T x D] → list of lists
     dict.set_item("dtIgnore", &e.dt_ignore)?;

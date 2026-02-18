@@ -1,0 +1,14 @@
+{
+  "images": [
+    {"id": 0, "file_name": "img0.jpg", "height": 200, "width": 200},
+    {"id": 1, "file_name": "img1.jpg", "height": 200, "width": 200}
+  ],
+  "annotations": [
+    {"id": 0, "image_id": 0, "category_id": 0, "bbox": [10, 10, 50, 50], "area": 2500, "iscrowd": 0},
+    {"id": 1, "image_id": 0, "category_id": 0, "bbox": [70, 70, 40, 40], "area": 1600, "iscrowd": 0},
+    {"id": 2, "image_id": 1, "category_id": 0, "bbox": [20, 20, 60, 60], "area": 3600, "iscrowd": 0}
+  ],
+  "categories": [
+    {"id": 0, "name": "thing"}
+  ]
+}
