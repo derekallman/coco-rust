@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  PYO3_USE_ABI3_FORWARD_COMPATIBILITY: 1
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test
+
+  python:
+    name: Python smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create virtualenv and install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin numpy
+
+      - name: Build Python extension
+        working-directory: crates/coco-pyo3
+        run: |
+          source ../../.venv/bin/activate
+          maturin develop --release
+
+      - name: Smoke test
+        run: |
+          source .venv/bin/activate
+          python -c "
+          import coco_rs
+          import json, os
+
+          fixtures = 'crates/coco-rs/tests/fixtures'
+          gt_path = os.path.join(fixtures, 'gt.json')
+          dt_path = os.path.join(fixtures, 'dt.json')
+
+          coco_gt = coco_rs.COCO(gt_path)
+          coco_dt = coco_gt.loadRes(dt_path)
+
+          coco_eval = coco_rs.COCOeval(coco_gt, coco_dt, 'bbox')
+          coco_eval.evaluate()
+          coco_eval.accumulate()
+          coco_eval.summarize()
+
+          stats = coco_eval.stats
+          assert len(stats) == 12, f'Expected 12 metrics, got {len(stats)}'
+          assert any(s > 0 for s in stats), 'Expected some positive metrics'
+          print('Smoke test passed!')
+          "

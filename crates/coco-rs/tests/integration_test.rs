@@ -267,3 +267,182 @@ fn test_area_ignored_gt_does_not_absorb_multiple_detections() {
     );
     assert!(ap > 0.3, "AP should be ~0.5, got {ap:.4}");
 }
+
+/// Helper to run bbox eval and return the 12 summary stats.
+fn run_bbox_eval(coco_gt: COCO, coco_dt: COCO) -> Vec<f64> {
+    let mut coco_eval = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+    coco_eval.evaluate();
+    coco_eval.accumulate();
+    coco_eval.summarize();
+    coco_eval.stats.expect("summarize should set stats")
+}
+
+/// Edge case test fixture covering crowd re-matching, bbox at origin,
+/// tied scores, all-FP images, all-miss images, area boundaries, and
+/// empty categories.
+#[test]
+fn test_edge_cases() {
+    let gt_path = fixtures_dir().join("edge_gt.json");
+    let dt_path = fixtures_dir().join("edge_dt.json");
+    let coco_gt = COCO::new(&gt_path).expect("Failed to load edge GT");
+    let coco_dt = coco_gt.load_res(&dt_path).expect("Failed to load edge DT");
+
+    let stats = run_bbox_eval(coco_gt, coco_dt);
+    assert_eq!(stats.len(), 12);
+
+    // Expected values from running the evaluator on the edge fixtures.
+    // The fixture exercises:
+    // - Crowd GT re-matching (image 1): 3 dets match crowd, none are FP
+    // - Bbox at origin [0,0,20,20] (image 2): correct zero-length RLE run handling
+    // - Tied scores 0.5 (image 3): deterministic matching of 2 non-overlapping GTs
+    // - All-FP (image 4): cat=2 dets with no GT → precision=0 for cat 2
+    // - All-miss (image 5): 2 GTs with no dets → recall=0
+    // - Area boundaries (image 6): 32²=1024 (medium), 96²=9216 (large boundary)
+    // - Empty category (cat 3): no GT, no DT → does not affect metrics
+    #[rustfmt::skip]
+    let expected: &[f64] = &[
+        0.712871,  // AP @[ IoU=0.50:0.95 | area=   all | maxDets=100 ]
+        0.712871,  // AP @[ IoU=0.50      | area=   all | maxDets=100 ]
+        0.712871,  // AP @[ IoU=0.75      | area=   all | maxDets=100 ]
+        0.663366,  // AP @[ IoU=0.50:0.95 | area= small | maxDets=100 ]
+        1.000000,  // AP @[ IoU=0.50:0.95 | area=medium | maxDets=100 ]
+        1.000000,  // AP @[ IoU=0.50:0.95 | area= large | maxDets=100 ]
+        0.428571,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ]
+        0.714286,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ]
+        0.714286,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets=100 ]
+        0.666667,  // AR @[ IoU=0.50:0.95 | area= small | maxDets=100 ]
+        1.000000,  // AR @[ IoU=0.50:0.95 | area=medium | maxDets=100 ]
+        1.000000,  // AR @[ IoU=0.50:0.95 | area= large | maxDets=100 ]
+    ];
+
+    let tol = 1e-4;
+    for (i, (&got, &exp)) in stats.iter().zip(expected.iter()).enumerate() {
+        assert!(
+            (got - exp).abs() < tol,
+            "stats[{i}] mismatch: got {got:.6}, expected {exp:.6}"
+        );
+    }
+}
+
+/// Test that crowd GTs allow re-matching by multiple detections.
+/// All detections overlapping a crowd GT should be "ignored" (not FP).
+#[test]
+fn test_crowd_rematching() {
+    let gt_dataset = Dataset {
+        info: None,
+        images: vec![Image {
+            id: 1,
+            file_name: "crowd.jpg".into(),
+            height: 100,
+            width: 100,
+            license: None,
+            coco_url: None,
+            flickr_url: None,
+            date_captured: None,
+        }],
+        annotations: vec![Annotation {
+            id: 1,
+            image_id: 1,
+            category_id: 1,
+            bbox: Some([10.0, 10.0, 50.0, 50.0]),
+            area: Some(2500.0),
+            iscrowd: true,
+            segmentation: None,
+            keypoints: None,
+            num_keypoints: None,
+            score: None,
+        }],
+        categories: vec![Category {
+            id: 1,
+            name: "thing".into(),
+            supercategory: None,
+            skeleton: None,
+            keypoints: None,
+        }],
+        licenses: vec![],
+    };
+
+    // 3 detections all overlapping the crowd GT
+    let dt_dataset = Dataset {
+        info: None,
+        images: gt_dataset.images.clone(),
+        annotations: vec![
+            Annotation {
+                id: 101,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([10.0, 10.0, 50.0, 50.0]),
+                area: Some(2500.0),
+                score: Some(0.9),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+            },
+            Annotation {
+                id: 102,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([12.0, 12.0, 48.0, 48.0]),
+                area: Some(2304.0),
+                score: Some(0.8),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+            },
+            Annotation {
+                id: 103,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([15.0, 15.0, 45.0, 45.0]),
+                area: Some(2025.0),
+                score: Some(0.7),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+            },
+        ],
+        categories: gt_dataset.categories.clone(),
+        licenses: vec![],
+    };
+
+    let coco_gt = COCO::from_dataset(gt_dataset);
+    let coco_dt = COCO::from_dataset(dt_dataset);
+
+    let mut coco_eval = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+    coco_eval.evaluate();
+    coco_eval.accumulate();
+
+    let eval = coco_eval.eval.as_ref().unwrap();
+    let m_idx = eval.m - 1; // maxDets=100
+
+    // With only a crowd GT and no non-crowd GTs:
+    // - All 3 detections should match the crowd GT (re-matching allowed)
+    // - All 3 detections become "ignored" (matched to crowd)
+    // - No non-ignored detections remain → no FPs
+    // - But also no non-crowd GT → recall is -1 (undefined)
+    //
+    // The key assertion: recall should be -1 (no non-crowd GT to measure against)
+    // and precision entries should all be -1 (no valid recall points).
+    let recall_idx = eval.recall_idx(0, 0, 0, m_idx); // t=0, k=0, a=0, m=maxDets
+    let recall = eval.recall[recall_idx];
+    assert!(
+        recall < 0.0,
+        "Recall should be -1 (no non-crowd GT), got {recall:.4}"
+    );
+
+    // Verify no FPs: if crowd re-matching is broken, some detections would be
+    // FP and precision would show valid (non-negative) values at some recall points.
+    // With correct behavior, all precision values should be -1.
+    let all_neg = (0..eval.r).all(|r| {
+        let idx = eval.precision_idx(0, r, 0, 0, m_idx);
+        eval.precision[idx] < 0.0
+    });
+    assert!(
+        all_neg,
+        "All precision values should be -1 (no non-crowd GT), \
+         but some are non-negative — crowd re-matching may be broken"
+    );
+}

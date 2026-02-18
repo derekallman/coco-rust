@@ -20,11 +20,12 @@ Lightweight per-sequence metric breakdowns for video object detection, surfacing
 
 ## CI/CD
 
-GitHub Actions for:
+GitHub Actions CI (shipped):
 
-- `cargo test`
-- `cargo clippy`
-- `cargo fmt --check`
-- Python binding tests (`maturin develop` + pytest)
-- Cross-platform matrix (Linux/macOS/Windows)
+- ~~`cargo test` / `cargo clippy` / `cargo fmt --check`~~
+- ~~Cross-platform matrix (Linux/macOS/Windows)~~
+- ~~Python smoke test (`maturin develop` + inline import/eval check)~~
+
+Deferred:
+
 - Automated release publishing to crates.io and PyPI

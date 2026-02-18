@@ -925,7 +925,11 @@ mod tests {
         let r1 = fr_bbox(&[0.0, 0.0, 10.0, 10.0], 20, 20);
         let r2 = fr_bbox(&[0.0, 0.0, 10.0, 10.0], 20, 20);
         // Identical masks → IoU = 1.0
-        let ious = iou(&[r1.clone()], &[r2.clone()], &[false]);
+        let ious = iou(
+            std::slice::from_ref(&r1),
+            std::slice::from_ref(&r2),
+            &[false],
+        );
         assert!(
             (ious[0][0] - 1.0).abs() < 1e-10,
             "Identical origin bboxes should have IoU=1.0, got {}",
@@ -934,7 +938,11 @@ mod tests {
 
         // Partially overlapping at origin
         let r3 = fr_bbox(&[0.0, 0.0, 5.0, 10.0], 20, 20);
-        let ious2 = iou(&[r3.clone()], &[r1.clone()], &[false]);
+        let ious2 = iou(
+            std::slice::from_ref(&r3),
+            std::slice::from_ref(&r1),
+            &[false],
+        );
         // intersection = 5*10 = 50, union = 50 + 100 - 50 = 100
         assert!(
             (ious2[0][0] - 0.5).abs() < 1e-10,
