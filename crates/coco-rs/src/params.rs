@@ -34,7 +34,7 @@ pub struct Params {
     pub area_rng: Vec<[f64; 2]>,
     /// Labels for each area range (e.g. "all", "small", "medium", "large").
     pub area_rng_lbl: Vec<String>,
-    /// Whether to evaluate per-category (true) or category-agnostic (false).
+    /// Whether to evaluate per-category (true) or pool all categories (false).
     pub use_cats: bool,
     /// Per-keypoint OKS sigmas (default: 17 COCO keypoint sigmas).
     pub kpt_oks_sigmas: Vec<f64>,

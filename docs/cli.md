@@ -26,7 +26,7 @@ This loads ground truth and detection files, runs evaluation, and prints the sta
 | `--img-ids <ids>` | Filter to specific image IDs (comma-separated) | all images |
 | `--cat-ids <ids>` | Filter to specific category IDs (comma-separated) | all categories |
 | `--max-dets <values>` | Max detections per image (comma-separated) | `1,10,100` |
-| `-a`, `--category-agnostic` | Pool all categories for category-agnostic evaluation | off |
+| `--no-cats` | Pool all categories (disable per-category evaluation) | off |
 
 ## Examples
 

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Full evaluation pipeline with all 12 AP/AR metrics (10 for keypoints)
 - Pure Rust RLE encoding/decoding (no C FFI)
 - Rayon-based parallel evaluation
-- CLI tool (`coco-cli`) with `--category-agnostic` flag
+- CLI tool (`coco-cli`) with `--no-cats` flag
 - PyO3 Python bindings (`coco_rs` package) with numpy interop
 - `init_as_pycocotools()` drop-in replacement via `sys.modules` patching
 - camelCase aliases for pycocotools API compatibility
