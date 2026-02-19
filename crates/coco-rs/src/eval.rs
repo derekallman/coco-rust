@@ -38,32 +38,43 @@ pub struct EvalImg {
     pub dt_ignore: Vec<Vec<bool>>,
 }
 
-/// Accumulated evaluation results.
+/// Accumulated evaluation results across all images.
+///
+/// Precision and scores are stored as flat 5-D arrays with shape `[T x R x K x A x M]`.
+/// Recall is a flat 4-D array with shape `[T x K x A x M]`. Values of -1.0 indicate
+/// that no data was available for that combination (e.g. a category with no GT instances).
 #[derive(Debug, Clone)]
 pub struct AccumulatedEval {
-    /// Precision: [T x R x K x A x M]
+    /// Interpolated precision at each (iou_thr, recall_thr, category, area_range, max_det).
     pub precision: Vec<f64>,
-    /// Recall: [T x K x A x M]
+    /// Maximum recall at each (iou_thr, category, area_range, max_det).
     pub recall: Vec<f64>,
-    /// Scores at precision thresholds: [T x R x K x A x M]
+    /// Detection score at each precision threshold, same shape as `precision`.
     pub scores: Vec<f64>,
-    /// Shape parameters
+    /// Number of IoU thresholds (T dimension).
     pub t: usize,
+    /// Number of recall thresholds (R dimension).
     pub r: usize,
+    /// Number of categories (K dimension).
     pub k: usize,
+    /// Number of area ranges (A dimension).
     pub a: usize,
+    /// Number of max-detection limits (M dimension).
     pub m: usize,
 }
 
 impl AccumulatedEval {
+    /// Compute the flat index into `precision` (or `scores`) for the given 5-D coordinates.
     pub fn precision_idx(&self, t: usize, r: usize, k: usize, a: usize, m: usize) -> usize {
         ((((t * self.r + r) * self.k + k) * self.a + a) * self.m) + m
     }
 
+    /// Compute the flat index into `recall` for the given 4-D coordinates.
     pub fn recall_idx(&self, t: usize, k: usize, a: usize, m: usize) -> usize {
         (((t * self.k + k) * self.a + a) * self.m) + m
     }
 
+    /// Compute the flat index into `scores` (same layout as `precision`).
     #[allow(dead_code)]
     fn scores_idx(&self, t: usize, r: usize, k: usize, a: usize, m: usize) -> usize {
         self.precision_idx(t, r, k, a, m)
@@ -204,6 +215,7 @@ impl COCOeval {
         }
     }
 
+    /// Get annotation IDs for an image, optionally filtered by category.
     fn get_anns_static<'a>(coco: &'a COCO, params: &Params, img_id: u64, cat_id: u64) -> &'a [u64] {
         if params.use_cats {
             coco.get_ann_ids_for_img_cat(img_id, cat_id)
@@ -212,6 +224,7 @@ impl COCOeval {
         }
     }
 
+    /// Compute segmentation mask IoU by converting annotations to RLE and calling `mask::iou`.
     fn compute_segm_iou_static(
         coco_gt: &COCO,
         coco_dt: &COCO,
@@ -241,6 +254,7 @@ impl COCOeval {
         mask::iou(&dt_rles, &gt_rles, &iscrowd)
     }
 
+    /// Compute bounding box IoU by extracting bbox arrays and calling `mask::bbox_iou`.
     fn compute_bbox_iou_static(
         coco_gt: &COCO,
         coco_dt: &COCO,
@@ -263,6 +277,12 @@ impl COCOeval {
         mask::bbox_iou(&dt_bbs, &gt_bbs, &iscrowd)
     }
 
+    /// Compute OKS (Object Keypoint Similarity) between detection and GT keypoints.
+    ///
+    /// OKS = mean_k[ exp( -d_k^2 / (2 * s_k^2 * area) ) ] where d_k is the Euclidean
+    /// distance for keypoint k, s_k is the per-keypoint sigma, and area is the GT area.
+    /// Only visible GT keypoints contribute. When no GT keypoints are visible, distance
+    /// is measured to the GT bounding box boundary instead.
     fn compute_oks_static(
         coco_gt: &COCO,
         coco_dt: &COCO,
@@ -471,9 +491,12 @@ impl COCOeval {
                 })
                 .collect();
 
+            // Greedy matching: for each IoU threshold, iterate detections in
+            // score-descending order and greedily match each to the best available GT.
             for (t_idx, &iou_thr) in params.iou_thrs.iter().enumerate() {
                 for (di, dt_ann) in dt_anns.iter().enumerate() {
-                    let mut best_iou = iou_thr; // minimum threshold
+                    // Track the best GT match: iou must exceed the threshold
+                    let mut best_iou = iou_thr;
                     let mut best_gi: Option<usize> = None;
 
                     let dt_row = &iou_reordered[di];
@@ -568,6 +591,8 @@ impl COCOeval {
             .collect();
 
         // Each work item produces a set of (index, value) writes for precision, recall, scores
+        /// Intermediate results from a single (category, area_range, max_det) work item.
+        /// Each field is a list of (flat_index, value) pairs to write into the output arrays.
         struct AccResult {
             precision_writes: Vec<(usize, f64)>,
             recall_writes: Vec<(usize, f64)>,
@@ -629,7 +654,9 @@ impl COCOeval {
                     };
                 }
 
-                // Initialize precision and recall to 0
+                // Initialize precision and recall to 0.0 (distinct from -1.0 which means
+                // "no data"). This ensures categories with GT but no matches show 0 AP,
+                // not "missing".
                 for t_idx in 0..t {
                     let recall_idx = ((t_idx * k + k_idx) * a + a_idx) * m + m_idx;
                     recall_writes.push((recall_idx, 0.0));
@@ -662,7 +689,8 @@ impl COCOeval {
                 let num_gt_f = num_gt as f64;
 
                 for t_idx in 0..t {
-                    // Fill tp/fp from sorted matches/ignore
+                    // Classify each detection (in score-sorted order) as TP, FP, or ignored.
+                    // Ignored detections contribute neither TP nor FP.
                     for (out_idx, &src_idx) in inds.iter().enumerate() {
                         if all_dt_ignore[t_idx][src_idx] {
                             tp[out_idx] = 0.0;
@@ -676,13 +704,13 @@ impl COCOeval {
                         }
                     }
 
-                    // Cumulative sum
+                    // Cumulative sum: tp[d] = total TPs up to detection d
                     for d in 1..nd {
                         tp[d] += tp[d - 1];
                         fp[d] += fp[d - 1];
                     }
 
-                    // Compute recall and precision in-place
+                    // Compute recall and precision at each detection threshold
                     for d in 0..nd {
                         rc[d] = tp[d] / num_gt_f;
                         let total = tp[d] + fp[d];
@@ -694,12 +722,15 @@ impl COCOeval {
                         recall_writes.push((recall_idx, rc[nd - 1]));
                     }
 
-                    // Interpolate precision in-place (make monotonically decreasing from right)
+                    // Make precision monotonically decreasing from right to left.
+                    // This is the standard PASCAL VOC interpolation: at each recall level,
+                    // precision is the maximum precision at any recall >= that level.
                     for d in (0..nd.saturating_sub(1)).rev() {
                         pr[d] = pr[d].max(pr[d + 1]);
                     }
 
-                    // Two-pointer search: both rc and rec_thrs are sorted ascending
+                    // Map interpolated precision onto the 101 fixed recall thresholds.
+                    // Both rc[] and rec_thrs are sorted ascending, so we use a two-pointer scan.
                     let mut rc_ptr = 0;
                     for (r_idx, &rec_thr) in self.params.rec_thrs.iter().enumerate() {
                         let p_idx = acc_idx.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
@@ -765,7 +796,8 @@ impl COCOeval {
 
         let is_kp = self.params.iou_type == IouType::Keypoints;
 
-        // Helper to compute a single summary statistic
+        // Compute a single summary statistic by averaging over the relevant slice
+        // of the precision or recall array. Returns -1.0 if no valid data exists.
         let summarize_stat =
             |ap: bool, iou_thr: Option<f64>, area_lbl: &str, max_det: usize| -> f64 {
                 let a_idx = self
@@ -833,10 +865,15 @@ impl COCOeval {
             max_det_default
         };
 
+        /// Definition of a single summary metric (one row in the COCO output table).
         struct MetricDef {
+            /// true = Average Precision, false = Average Recall.
             ap: bool,
+            /// Specific IoU threshold, or None to average over all thresholds.
             iou_thr: Option<f64>,
+            /// Area range label to filter by (e.g. "all", "small", "medium", "large").
             area_lbl: &'static str,
+            /// Maximum detections per image for this metric.
             max_det: usize,
         }
 
@@ -1009,7 +1046,6 @@ impl COCOeval {
 
             let iou_str = match m.iou_thr {
                 Some(thr) => format!("{:.2}", thr),
-                None if m.ap => "0.50:0.95".to_string(),
                 None => "0.50:0.95".to_string(),
             };
 

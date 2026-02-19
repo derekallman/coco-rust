@@ -68,6 +68,7 @@ impl COCO {
         self.cat_to_imgs.clear();
         self.img_cat_to_anns.clear();
 
+        // Single pass over annotations: build all annotation-derived indices at once
         for (i, ann) in self.dataset.annotations.iter().enumerate() {
             self.anns.insert(ann.id, i);
             self.img_to_anns
@@ -78,6 +79,10 @@ impl COCO {
                 .entry((ann.image_id, ann.category_id))
                 .or_default()
                 .push(ann.id);
+            self.cat_to_imgs
+                .entry(ann.category_id)
+                .or_default()
+                .push(ann.image_id);
         }
 
         for (i, img) in self.dataset.images.iter().enumerate() {
@@ -88,14 +93,7 @@ impl COCO {
             self.cats.insert(cat.id, i);
         }
 
-        // Build cat_to_imgs
-        for ann in &self.dataset.annotations {
-            self.cat_to_imgs
-                .entry(ann.category_id)
-                .or_default()
-                .push(ann.image_id);
-        }
-        // Deduplicate cat_to_imgs
+        // Deduplicate cat_to_imgs (multiple annotations per image produce duplicates)
         for ids in self.cat_to_imgs.values_mut() {
             ids.sort_unstable();
             ids.dedup();

@@ -15,6 +15,7 @@ pub struct Dataset {
     pub licenses: Vec<License>,
 }
 
+/// Dataset metadata (version, description, date, etc.).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Info {
     #[serde(default)]
@@ -31,6 +32,7 @@ pub struct Info {
     pub date_created: Option<String>,
 }
 
+/// A single image in the dataset.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Image {
     pub id: u64,
@@ -48,6 +50,7 @@ pub struct Image {
     pub date_captured: Option<String>,
 }
 
+/// A single object annotation (ground truth or detection result).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Annotation {
     #[serde(default)]
@@ -71,6 +74,9 @@ pub struct Annotation {
     pub score: Option<f64>,
 }
 
+/// Deserialize `iscrowd` from either a boolean or an integer (0/1).
+///
+/// COCO JSON files use both representations, so we accept either.
 fn deserialize_iscrowd<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
     D: Deserializer<'de>,
@@ -87,6 +93,9 @@ where
     }
 }
 
+/// Segmentation mask in one of three COCO formats.
+///
+/// Uses `#[serde(untagged)]` to auto-detect the format from JSON structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Segmentation {
@@ -98,6 +107,7 @@ pub enum Segmentation {
     UncompressedRle { size: [u32; 2], counts: Vec<u32> },
 }
 
+/// An object category (e.g. "person", "car").
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Category {
     pub id: u64,
@@ -110,6 +120,7 @@ pub struct Category {
     pub keypoints: Option<Vec<String>>,
 }
 
+/// Image license information.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct License {
     #[serde(default)]

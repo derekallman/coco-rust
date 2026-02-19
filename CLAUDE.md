@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Read CLAUDE.md carefully before starting any task. If you're about to write documentation, benchmarks, or make git commits, check the relevant section of CLAUDE.md for my conventions first.
+
+## Project Context
+
+This is a Rust project with Python bindings (PyO3). Primary language is Rust. When writing documentation, take a Python-first perspective targeting data scientists, similar to Polars documentation style. Do not make docs too Rust-centric.
+
 ## Project Overview
 
 coco-rust is a pure Rust port of [pycocotools](https://github.com/ppwwyyxx/cocoapi) with PyO3 Python bindings. It provides 11-26x speedups over pycocotools for bbox, segmentation, and keypoint evaluation.
@@ -55,6 +61,18 @@ cargo fmt --all -- --check     # Check formatting
 cd crates/coco-pyo3
 maturin develop --release      # Build + install into active Python env
 ```
+
+## Refactoring
+
+Use a task agent to find every file and line that references the old naming convention, then summarize what needs to change before making any edits.
+
+## Documentation
+
+Before writing the full documentation, show me an outline with 2-3 example sections so I can confirm the tone, structure, and audience focus. Do not generate all pages until I approve.
+
+## Pre-Commit Checks
+
+After making code changes, always run the full test suite (`cargo test` for Rust, `pytest` for Python) and verify all tests pass before committing. Never commit code with failing tests.
 
 ## Git Workflow
 

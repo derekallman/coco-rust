@@ -1,27 +1,51 @@
 use serde::{Deserialize, Serialize};
 
+/// The type of IoU (intersection over union) computation to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum IouType {
+    /// Bounding box IoU.
     Bbox,
+    /// Segmentation mask IoU (RLE-based).
     Segm,
+    /// Keypoint OKS (object keypoint similarity).
     Keypoints,
 }
 
+/// Evaluation parameters controlling IoU thresholds, area ranges, and detection limits.
+///
+/// Defaults match pycocotools: 10 IoU thresholds (0.50:0.05:0.95), 101 recall
+/// thresholds, and standard COCO area ranges. Keypoint evaluation uses different
+/// defaults (3 area ranges instead of 4, max 20 detections instead of 1/10/100).
 #[derive(Debug, Clone)]
 pub struct Params {
+    /// IoU computation type (bbox, segm, or keypoints).
     pub iou_type: IouType,
+    /// Image IDs to evaluate (empty = all images).
     pub img_ids: Vec<u64>,
+    /// Category IDs to evaluate (empty = all categories).
     pub cat_ids: Vec<u64>,
+    /// IoU thresholds for matching (default: 0.50, 0.55, ..., 0.95).
     pub iou_thrs: Vec<f64>,
+    /// Recall thresholds for interpolated precision (default: 0.00, 0.01, ..., 1.00).
     pub rec_thrs: Vec<f64>,
+    /// Maximum detections per image for each summary metric (default: [1, 10, 100]).
     pub max_dets: Vec<usize>,
+    /// Area ranges as `[min, max]` for filtering (default: all/small/medium/large).
     pub area_rng: Vec<[f64; 2]>,
+    /// Labels for each area range (e.g. "all", "small", "medium", "large").
     pub area_rng_lbl: Vec<String>,
+    /// Whether to evaluate per-category (true) or category-agnostic (false).
     pub use_cats: bool,
+    /// Per-keypoint OKS sigmas (default: 17 COCO keypoint sigmas).
     pub kpt_oks_sigmas: Vec<f64>,
 }
 
 impl Params {
+    /// Create default parameters for the given evaluation type.
+    ///
+    /// Keypoint evaluation uses 3 area ranges (all/medium/large) and a single
+    /// max-detections value of 20. All other types use 4 area ranges
+    /// (all/small/medium/large) and max-detections of [1, 10, 100].
     pub fn new(iou_type: IouType) -> Self {
         let (max_dets, area_rng, area_rng_lbl) = match iou_type {
             IouType::Keypoints => (

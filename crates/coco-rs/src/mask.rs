@@ -78,19 +78,17 @@ pub fn to_bbox(rle: &Rle) -> [f64; 4] {
     let mut ye: usize = 0;
     let mut has_any = false;
 
-    let mut cc = 0usize; // cumulative count
+    let mut cc = 0usize; // cumulative pixel count (column-major flat index)
     for (i, &c) in rle.counts.iter().enumerate() {
         let c = c as usize;
         if i % 2 == 1 {
-            // foreground run
+            // Foreground run: convert flat indices to (column, row) coordinates
             has_any = true;
-            // start pixel of this run
-            let x1 = cc / h;
-            let y1 = cc % h;
-            // end pixel (inclusive)
-            let end = cc + c - 1;
-            let x2 = end / h;
-            let y2 = end % h;
+            let x1 = cc / h;       // start column
+            let y1 = cc % h;       // start row
+            let end = cc + c - 1;  // last pixel (inclusive)
+            let x2 = end / h;      // end column
+            let y2 = end % h;      // end row
 
             if x1 < xs {
                 xs = x1;
@@ -147,7 +145,11 @@ pub fn merge(rles: &[Rle], intersect: bool) -> Rle {
     result
 }
 
-/// Merge two RLE masks.
+/// Merge two RLE masks using a two-pointer walk over both run streams.
+///
+/// At each step, consumes the shorter remaining run from either stream,
+/// combining the current foreground/background values with AND (intersect=true)
+/// or OR (intersect=false). Runs of equal output value are coalesced.
 fn merge_two(a: &Rle, b: &Rle, intersect: bool) -> Rle {
     let h = a.h;
     let w = a.w;
@@ -385,17 +387,19 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
     let h_s = h as i64;
     let w_s = w as i64;
 
-    // Stage 1: Upsample coordinates and walk edges to get dense boundary points
+    // Stage 1: Upsample polygon vertices by 5x and walk each edge using a
+    // Bresenham-like algorithm to produce dense boundary points (u, v).
     let mut x_int: Vec<i32> = Vec::with_capacity(k + 1);
     let mut y_int: Vec<i32> = Vec::with_capacity(k + 1);
     for j in 0..k {
         x_int.push((scale * xy[j * 2] + 0.5) as i32);
         y_int.push((scale * xy[j * 2 + 1] + 0.5) as i32);
     }
+    // Close the polygon by repeating the first vertex
     x_int.push(x_int[0]);
     y_int.push(y_int[0]);
 
-    // Count total boundary points
+    // Pre-count total boundary points across all edges for allocation
     let mut m_total: usize = 0;
     for j in 0..k {
         m_total += (x_int[j] - x_int[j + 1])
@@ -407,6 +411,9 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
     let mut u: Vec<i32> = Vec::with_capacity(m_total);
     let mut v: Vec<i32> = Vec::with_capacity(m_total);
 
+    // Walk each edge, stepping along the longer axis (dx or dy).
+    // If the edge runs "backwards" (right-to-left or bottom-to-top), flip the
+    // direction so we always step forward, then reverse the traversal order.
     for j in 0..k {
         let mut xs = x_int[j];
         let mut xe = x_int[j + 1];
@@ -419,6 +426,7 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
             std::mem::swap(&mut xs, &mut xe);
             std::mem::swap(&mut ys, &mut ye);
         }
+        // Slope of the minor axis per step along the major axis
         let s: f64 = if dx >= dy {
             if dx == 0 {
                 0.0
@@ -431,12 +439,14 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
             (xe - xs) as f64 / dy as f64
         };
         if dx >= dy {
+            // Step along x, interpolate y
             for d in 0..=dx {
                 let t = if flip { dx - d } else { d };
                 u.push(t + xs);
                 v.push((ys as f64 + s * t as f64 + 0.5) as i32);
             }
         } else {
+            // Step along y, interpolate x
             for d in 0..=dy {
                 let t = if flip { dy - d } else { d };
                 v.push(t + ys);
@@ -445,18 +455,24 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
         }
     }
 
-    // Stage 2: Get points along y-boundary and downsample
+    // Stage 2: Detect column transitions (x-boundary crossings) in the upsampled
+    // boundary, downsample back to original resolution, and record the (column, row)
+    // where the polygon edge crosses into a new pixel column.
     let m = u.len();
     let mut bx: Vec<i32> = Vec::with_capacity(m);
     let mut by: Vec<i32> = Vec::with_capacity(m);
 
     for j in 1..m {
+        // Only process points where the x-coordinate changed (column crossing)
         if u[j] != u[j - 1] {
+            // Determine which column boundary was crossed and downsample
             let xd_raw = if u[j] < u[j - 1] { u[j] } else { u[j] - 1 };
             let xd: f64 = (xd_raw as f64 + 0.5) / scale - 0.5;
+            // Skip if this doesn't land on an integer column boundary within image bounds
             if xd != xd.floor() || xd < 0.0 || xd > (w_s - 1) as f64 {
                 continue;
             }
+            // Downsample the y-coordinate and clamp to image bounds
             let yd_raw = if v[j] < v[j - 1] { v[j] } else { v[j - 1] };
             let mut yd: f64 = (yd_raw as f64 + 0.5) / scale - 0.5;
             if yd < 0.0 {
@@ -470,16 +486,20 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
         }
     }
 
-    // Stage 3: Compute RLE encoding from y-boundary points
+    // Stage 3: Convert boundary points to column-major pixel indices, sort them,
+    // compute successive differences to get run lengths, then merge any zero-length
+    // runs (which arise when two boundary points land on the same pixel).
     let bp = bx.len();
     let mut a: Vec<u32> = Vec::with_capacity(bp + 1);
+    // Convert (column, row) boundary points to column-major flat indices
     for j in 0..bp {
         a.push((bx[j] as u32) * (h) + (by[j] as u32));
     }
+    // Sentinel: total pixel count marks the end of the mask
     a.push(h * w);
     a.sort_unstable();
 
-    // Compute differences
+    // Convert sorted positions to run lengths via successive differences
     let mut prev: u32 = 0;
     for val in a.iter_mut() {
         let t = *val;
@@ -487,7 +507,7 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
         prev = t;
     }
 
-    // Merge zero-length runs
+    // Merge zero-length runs (two boundary points at the same position cancel out)
     let mut counts: Vec<u32> = Vec::with_capacity(a.len());
     let mut i = 0;
     if !a.is_empty() {
