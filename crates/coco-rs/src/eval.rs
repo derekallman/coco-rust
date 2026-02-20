@@ -802,9 +802,10 @@ impl COCOeval {
 
         let default_iou: Vec<f64> = (0..10).map(|i| 0.5 + 0.05 * i as f64).collect();
         if self.params.iou_thrs != default_iou {
-            warnings.push(format!(
+            warnings.push(
                 "iou_thrs differ from default (0.50:0.05:0.95). AP50/AP75 lines may show -1.000."
-            ));
+                    .to_string(),
+            );
         }
         if self.params.max_dets != defaults.max_dets {
             warnings.push(format!(

@@ -72,10 +72,23 @@ Before writing the full documentation, show me an outline with 2-3 example secti
 
 ## Pre-Commit Checks
 
-After making code changes, always run the full test suite (`cargo test` for Rust, `pytest` for Python) and verify all tests pass before committing. Never commit code with failing tests.
+A git pre-commit hook in `hooks/pre-commit` runs these three checks automatically — they mirror CI exactly. All three must pass or the commit is rejected.
+
+```bash
+cargo fmt --all -- --check                              # 1. Formatting
+cargo clippy --workspace --all-targets -- -D warnings   # 2. Lint (warnings are errors)
+cargo test                                              # 3. Tests
+```
+
+To install the hook (one-time setup):
+
+```bash
+ln -sf ../../hooks/pre-commit .git/hooks/pre-commit
+```
+
+If formatting fails, run `cargo fmt --all` to fix, then re-commit. If clippy fails, fix the warning before committing. Never suppress clippy warnings with allows. Never skip the hook with `--no-verify`.
 
 ## Git Workflow
 
 - When committing and pushing, always verify the current git status first to avoid trying to commit already-committed changes. Check `git status` and `git log --oneline -3` before any commit/push operation.
 - Main branch: `main`.
-- Run `cargo test` and `cargo clippy` before committing.
