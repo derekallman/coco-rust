@@ -1,0 +1,77 @@
+[project]
+site_name = "coco-rust"
+site_url = "https://derekallman.github.io/coco-rust/"
+site_description = "A drop-in replacement for pycocotools, 11-26x faster."
+repo_url = "https://github.com/derekallman/coco-rust"
+repo_name = "derekallman/coco-rust"
+
+nav = [
+  { "Home" = "index.md" },
+  { "Getting Started" = [
+    { "Installation" = "getting-started/installation.md" },
+    { "Quick Start" = "getting-started/quickstart.md" },
+    { "Migrating from pycocotools" = "getting-started/migration.md" },
+  ] },
+  { "User Guide" = [
+    { "Evaluation" = "guide/evaluation.md" },
+    { "Working with Results" = "guide/results.md" },
+    { "Mask Operations" = "guide/masks.md" },
+  ] },
+  { "API Reference" = [
+    { "COCO" = "api/coco.md" },
+    { "COCOeval" = "api/cocoeval.md" },
+    { "Params" = "api/params.md" },
+    { "mask" = "api/mask.md" },
+    { "CLI" = "cli.md" },
+  ] },
+  { "Performance" = [
+    { "Benchmarks" = "benchmarks.md" },
+  ] },
+]
+
+extra_css = ["stylesheets/extra.css"]
+
+[project.theme]
+features = [
+  "content.code.copy",
+  "content.tabs.link",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.footer",
+  "navigation.top",
+]
+
+[[project.theme.palette]]
+scheme = "slate"
+primary = "indigo"
+accent = "indigo"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "indigo"
+accent = "indigo"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.highlight]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.details]

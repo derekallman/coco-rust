@@ -1,13 +1,71 @@
-/* Always show the left sidebar, even on narrow screens */
-@media screen and (max-width: 76.1875em) {
-  .md-nav--primary .md-nav__title[for="__drawer"] {
-    display: none;
-  }
-  .md-nav--primary > .md-nav__list {
-    display: block;
-  }
-  .md-sidebar--primary {
-    display: block;
-    position: sticky;
-  }
+/* Hero section */
+.md-typeset .hero {
+  text-align: center;
+  padding: 2rem 1rem 1rem;
+}
+
+.md-typeset .hero h1 {
+  font-size: 2.4rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.md-typeset .hero .hero-tagline {
+  font-size: 1.2rem;
+  opacity: 0.8;
+  margin-bottom: 2rem;
+}
+
+.md-typeset .hero .hero-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+}
+
+/* Feature card grid */
+.md-typeset .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.md-typeset .feature-card {
+  padding: 1.25rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  text-align: left;
+}
+
+.md-typeset .feature-card strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.md-typeset .feature-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+/* Quickstart code block on landing page */
+.md-typeset .quickstart pre {
+  margin: 0;
+}
+
+/* Benchmark table */
+.md-typeset .benchmark-table table {
+  width: 100%;
+}
+
+.md-typeset .benchmark-table th,
+.md-typeset .benchmark-table td {
+  text-align: right;
+}
+
+.md-typeset .benchmark-table th:first-child,
+.md-typeset .benchmark-table td:first-child {
+  text-align: left;
 }
