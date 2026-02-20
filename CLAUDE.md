@@ -70,6 +70,8 @@ Use a task agent to find every file and line that references the old naming conv
 
 Before writing the full documentation, show me an outline with 2-3 example sections so I can confirm the tone, structure, and audience focus. Do not generate all pages until I approve.
 
+When updating documentation (`docs/`) or `README.md`, always ensure both reflect the same information. Any change to one must be checked against the other — benchmark numbers, API examples, CLI flags, installation instructions, and feature descriptions must stay consistent across both.
+
 ## Pre-Commit Checks
 
 A git pre-commit hook in `hooks/pre-commit` runs these three checks automatically — they mirror CI exactly. All three must pass or the commit is rejected.
