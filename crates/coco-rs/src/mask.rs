@@ -84,11 +84,11 @@ pub fn to_bbox(rle: &Rle) -> [f64; 4] {
         if i % 2 == 1 {
             // Foreground run: convert flat indices to (column, row) coordinates
             has_any = true;
-            let x1 = cc / h;       // start column
-            let y1 = cc % h;       // start row
-            let end = cc + c - 1;  // last pixel (inclusive)
-            let x2 = end / h;      // end column
-            let y2 = end % h;      // end row
+            let x1 = cc / h; // start column
+            let y1 = cc % h; // start row
+            let end = cc + c - 1; // last pixel (inclusive)
+            let x2 = end / h; // end column
+            let y2 = end % h; // end row
 
             if x1 < xs {
                 xs = x1;
