@@ -796,6 +796,33 @@ impl COCOeval {
 
         let is_kp = self.params.iou_type == IouType::Keypoints;
 
+        // Warn if parameters differ from what the hardcoded summary display expects.
+        let defaults = Params::new(self.params.iou_type);
+        let mut warnings = Vec::new();
+
+        let default_iou: Vec<f64> = (0..10).map(|i| 0.5 + 0.05 * i as f64).collect();
+        if self.params.iou_thrs != default_iou {
+            warnings.push(format!(
+                "iou_thrs differ from default (0.50:0.05:0.95). AP50/AP75 lines may show -1.000."
+            ));
+        }
+        if self.params.max_dets != defaults.max_dets {
+            warnings.push(format!(
+                "max_dets differ from default ({:?}). AR lines may use unexpected max_dets values.",
+                defaults.max_dets
+            ));
+        }
+        if self.params.area_rng_lbl != defaults.area_rng_lbl {
+            warnings.push(format!(
+                "area_rng_lbl differ from default ({:?}). Per-size metrics may fall back to index 0.",
+                defaults.area_rng_lbl
+            ));
+        }
+
+        for w in &warnings {
+            eprintln!("Warning: {}", w);
+        }
+
         // Compute a single summary statistic by averaging over the relevant slice
         // of the precision or recall array. Returns -1.0 if no valid data exists.
         let summarize_stat =

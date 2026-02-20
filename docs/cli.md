@@ -1,20 +1,18 @@
-# CLI Reference
+# CLI
 
 The `coco-eval` command runs COCO evaluation from the terminal.
 
-!!! note "Installation"
-    ```bash
-    cargo install coco-cli
-    ```
-    See [Installation](installation.md) for more options.
+## Installation
 
-## Basic Usage
+```bash
+cargo install coco-cli
+```
+
+## Usage
 
 ```bash
 coco-eval --gt annotations.json --dt detections.json --iou-type bbox
 ```
-
-This loads ground truth and detection files, runs evaluation, and prints the standard COCO metrics.
 
 ## Options
 
@@ -25,30 +23,29 @@ This loads ground truth and detection files, runs evaluation, and prints the sta
 | `--iou-type <type>` | Evaluation type: `bbox`, `segm`, or `keypoints` | `bbox` |
 | `--img-ids <ids>` | Filter to specific image IDs (comma-separated) | all images |
 | `--cat-ids <ids>` | Filter to specific category IDs (comma-separated) | all categories |
-| `--max-dets <values>` | Max detections per image (comma-separated) | `1,10,100` |
 | `--no-cats` | Pool all categories (disable per-category evaluation) | off |
 
 ## Examples
 
-### Bounding Box Evaluation
+### Bounding box evaluation
 
 ```bash
 coco-eval --gt instances_val2017.json --dt bbox_results.json --iou-type bbox
 ```
 
-### Segmentation Evaluation
+### Segmentation evaluation
 
 ```bash
 coco-eval --gt instances_val2017.json --dt segm_results.json --iou-type segm
 ```
 
-### Keypoint Evaluation
+### Keypoint evaluation
 
 ```bash
 coco-eval --gt person_keypoints_val2017.json --dt kpt_results.json --iou-type keypoints
 ```
 
-### Filter by Category
+### Filter by category
 
 Evaluate only "person" (category 1) and "car" (category 3):
 
@@ -56,26 +53,18 @@ Evaluate only "person" (category 1) and "car" (category 3):
 coco-eval --gt instances_val2017.json --dt results.json --cat-ids 1,3
 ```
 
-### Filter by Image
-
-Evaluate only specific images:
+### Filter by image
 
 ```bash
 coco-eval --gt instances_val2017.json --dt results.json --img-ids 139,285,632
 ```
 
-### Custom Max Detections
-
-```bash
-coco-eval --gt instances_val2017.json --dt results.json --max-dets 1,10,50
-```
-
-### Category-Agnostic Evaluation
+### Category-agnostic evaluation
 
 Pool all categories together (ignores category labels):
 
 ```bash
-coco-eval --gt instances_val2017.json --dt results.json -a
+coco-eval --gt instances_val2017.json --dt results.json --no-cats
 ```
 
 ## Output
@@ -95,10 +84,4 @@ The tool prints the standard 12 COCO metrics (10 for keypoints):
  Average Recall (AR) @[ IoU=0.50:0.95 | area= small | maxDets=100 ] = 0.701
  Average Recall (AR) @[ IoU=0.50:0.95 | area=medium | maxDets=100 ] = 0.935
  Average Recall (AR) @[ IoU=0.50:0.95 | area= large | maxDets=100 ] = 0.997
-```
-
-A machine-readable stats line is also printed to stdout:
-
-```
-stats: [0.783..., 0.971..., ...]
 ```

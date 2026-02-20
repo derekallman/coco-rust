@@ -30,10 +30,6 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     cat_ids: Option<Vec<u64>>,
 
-    /// Max detections per image (comma-separated, e.g., "1,10,100")
-    #[arg(long, value_delimiter = ',')]
-    max_dets: Option<Vec<usize>>,
-
     /// Pool all categories (disable per-category evaluation)
     #[arg(long)]
     no_cats: bool,
@@ -68,9 +64,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cat_ids) = cli.cat_ids {
         coco_eval.params.cat_ids = cat_ids;
-    }
-    if let Some(max_dets) = cli.max_dets {
-        coco_eval.params.max_dets = max_dets;
     }
     if cli.no_cats {
         coco_eval.params.use_cats = false;
