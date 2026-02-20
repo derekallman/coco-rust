@@ -1,6 +1,29 @@
 # Roadmap
 
-Planned features and improvements for coco-rust, organized by theme.
+Planned features and improvements, organized by theme.
+
+## Dataset Statistics
+
+Quick health check for any COCO dataset — annotation counts per category, image size distributions, area distributions, crowd/iscrowd breakdown. Available as `coco.stats()` in Python and a CLI command. The kind of thing everyone writes ad-hoc scripts for before training.
+
+## Dataset Operations
+
+Split, merge, filter, and sample COCO datasets:
+
+- **Filter** — subset by category, image ID, area range, or custom predicate
+- **Merge** — combine multiple annotation files (e.g., separate labeling batches)
+- **Split** — stratified train/val/test split preserving category distribution
+- **Sample** — random or deterministic subset for quick iteration
+
+CLI and Python API. Reuses existing COCO loading infrastructure.
+
+## Format Conversion
+
+COCO ↔ YOLO, COCO ↔ Pascal VOC, COCO ↔ CVAT. Everyone has a slightly broken converter script — a correct, fast, well-tested one has high value. High surface area though, so this should be scoped carefully (start with YOLO, the most requested).
+
+## Streaming Evaluation
+
+Evaluate datasets that don't fit in memory. Process annotations in chunks without loading the full ground truth and detection sets upfront. Critical for production datasets with millions of annotations.
 
 ## Confusion Matrices
 
