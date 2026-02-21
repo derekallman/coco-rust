@@ -2,9 +2,29 @@
 
 Planned features and improvements, organized by theme.
 
+## Architecture
+
+All core logic lives in the Rust library. The Python package and Rust CLI are thin wrappers.
+
+```
+                       ┌──→ PyO3 ──→ Python Library + CLI (full-featured)
+Rust Core (all logic) ─┤
+                       └──→ coco-eval (Rust CLI, eval only)
+```
+
+- **Rust core** — types, masks, eval, dataset ops, format conversion, streaming
+- **Python CLI** (primary) — all subcommands: `$ coco eval`, `$ coco stats`, `$ coco merge`, `$ coco plot`, etc. Rich formatting, plots via matplotlib/plotly.
+- **Rust CLI** — evaluation only: `$ coco-eval`. JSON/CSV/markdown output, no plots, no Python. New features are added on request.
+
+| Registry | Package | Contents |
+|----------|---------|----------|
+| PyPI | `coco-kit` | Python library + Python CLI + compiled Rust core |
+| crates.io | `coco-kit` | Rust library |
+| crates.io | `coco-cli` | `coco-eval` binary (eval only, no Python) |
+
 ## Dataset Statistics
 
-Quick health check for any COCO dataset — annotation counts per category, image size distributions, area distributions, crowd/iscrowd breakdown. Available as `coco.stats()` in Python and a CLI command. The kind of thing everyone writes ad-hoc scripts for before training.
+Quick health check for any COCO dataset — annotation counts per category, image size distributions, area distributions, crowd/iscrowd breakdown. Available as `coco.stats()` in Python and `coco stats` in the Python CLI.
 
 ## Dataset Operations
 
@@ -15,7 +35,7 @@ Split, merge, filter, and sample COCO datasets:
 - **Split** — stratified train/val/test split preserving category distribution
 - **Sample** — random or deterministic subset for quick iteration
 
-CLI and Python API. Reuses existing COCO loading infrastructure.
+All implemented in Rust core, exposed via Python CLI and Python API.
 
 ## Format Conversion
 
