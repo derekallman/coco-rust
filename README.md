@@ -4,7 +4,7 @@ A drop-in replacement for [pycocotools](https://github.com/ppwwyyxx/cocoapi) —
 
 Available as a **Python package**, **CLI tool**, and **Rust library**.
 
-**[Documentation](https://derekallman.github.io/coco-rust/)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](ROADMAP.md)**
+**[Documentation](https://derekallman.github.io/hotcoco/)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](ROADMAP.md)**
 
 ## Performance
 
