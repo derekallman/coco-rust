@@ -68,7 +68,4 @@ GitHub Actions CI (shipped):
 - ~~`cargo test` / `cargo clippy` / `cargo fmt --check`~~
 - ~~Cross-platform matrix (Linux/macOS/Windows)~~
 - ~~Python smoke test (`maturin develop` + inline import/eval check)~~
-
-Deferred:
-
-- Automated release publishing to crates.io and PyPI
+- ~~Automated release publishing to crates.io and PyPI~~

@@ -1,3 +1,15 @@
 [workspace]
 members = ["crates/hotcoco", "crates/hotcoco-cli", "crates/hotcoco-pyo3"]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+authors = ["Derek Allman <derek.allman@yahoo.com>"]
+license = "MIT"
+repository = "https://github.com/derekallman/hotcoco"
+homepage = "https://derekallman.github.io/hotcoco/"
+readme = "README.md"
+keywords = ["coco", "object-detection", "evaluation", "computer-vision", "segmentation"]
+categories = ["computer-vision", "science"]

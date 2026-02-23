@@ -5,8 +5,33 @@ build-backend = "maturin"
 [project]
 name = "hotcoco"
 version = "0.1.0"
+description = "Drop-in pycocotools replacement — 11-26x faster COCO evaluation in pure Rust"
 requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "Derek Allman", email = "derek.allman@yahoo.com" }]
+keywords = ["coco", "object-detection", "evaluation", "computer-vision", "segmentation"]
+readme = "../../README.md"
 dependencies = ["numpy>=1.22"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+[project.urls]
+Homepage = "https://derekallman.github.io/hotcoco/"
+Repository = "https://github.com/derekallman/hotcoco"
+Documentation = "https://derekallman.github.io/hotcoco/"
+Changelog = "https://github.com/derekallman/hotcoco/releases"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
