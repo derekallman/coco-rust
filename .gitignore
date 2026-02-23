@@ -32,3 +32,6 @@ data/
 # Python virtual environments and build artifacts
 .venv/
 crates/hotcoco-pyo3/uv.lock
+crates/hotcoco-pyo3/python/**/__pycache__/
+crates/hotcoco-pyo3/python/**/*.so
+crates/hotcoco-pyo3/python/**/*.pyd
