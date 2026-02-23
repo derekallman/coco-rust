@@ -1,4 +1,4 @@
-use hotcoco_core::{Annotation, Category, Image, Rle, Segmentation};
+use hotcoco_core::{Annotation, Category, DatasetStats, Image, Rle, Segmentation};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -151,6 +151,46 @@ pub fn category_to_py(py: Python<'_>, cat: &Category) -> PyResult<PyObject> {
     if let Some(ref kpts) = cat.keypoints {
         dict.set_item("keypoints", kpts.clone())?;
     }
+    Ok(dict.into_any().unbind())
+}
+
+pub fn dataset_stats_to_py(py: Python<'_>, stats: &DatasetStats) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+    dict.set_item("image_count", stats.image_count)?;
+    dict.set_item("annotation_count", stats.annotation_count)?;
+    dict.set_item("category_count", stats.category_count)?;
+    dict.set_item("crowd_count", stats.crowd_count)?;
+
+    let per_cat = PyList::new(
+        py,
+        stats
+            .per_category
+            .iter()
+            .map(|c| -> PyResult<PyObject> {
+                let d = PyDict::new(py);
+                d.set_item("id", c.id)?;
+                d.set_item("name", &c.name)?;
+                d.set_item("ann_count", c.ann_count)?;
+                d.set_item("img_count", c.img_count)?;
+                d.set_item("crowd_count", c.crowd_count)?;
+                Ok(d.into_any().unbind())
+            })
+            .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    dict.set_item("per_category", per_cat)?;
+
+    let summary_to_dict = |s: &hotcoco_core::SummaryStats| -> PyResult<PyObject> {
+        let d = PyDict::new(py);
+        d.set_item("min", s.min)?;
+        d.set_item("max", s.max)?;
+        d.set_item("mean", s.mean)?;
+        d.set_item("median", s.median)?;
+        Ok(d.into_any().unbind())
+    };
+    dict.set_item("image_width", summary_to_dict(&stats.image_width)?)?;
+    dict.set_item("image_height", summary_to_dict(&stats.image_height)?)?;
+    dict.set_item("annotation_area", summary_to_dict(&stats.annotation_area)?)?;
+
     Ok(dict.into_any().unbind())
 }
 

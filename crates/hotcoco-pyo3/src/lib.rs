@@ -7,7 +7,9 @@ use pyo3::types::{PyDict, PyList};
 mod convert;
 mod mask;
 
-use convert::{annotation_to_py, category_to_py, image_to_py, py_to_annotation, rle_to_py};
+use convert::{
+    annotation_to_py, category_to_py, dataset_stats_to_py, image_to_py, py_to_annotation, rle_to_py,
+};
 
 // ---------------------------------------------------------------------------
 // COCO
@@ -154,6 +156,11 @@ impl PyCOCO {
             }
         }
         Ok(arr.unbind())
+    }
+
+    fn stats(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let s = self.inner.stats();
+        dataset_stats_to_py(py, &s)
     }
 
     // camelCase aliases for pycocotools compatibility
