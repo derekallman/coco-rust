@@ -18,8 +18,8 @@ print("hotcoco installed successfully")
 
 ??? info "Build from source"
     ```bash
-    git clone https://github.com/derekallman/coco-rust.git
-    cd coco-rust/crates/hotcoco-pyo3
+    git clone https://github.com/derekallman/hotcoco.git
+    cd hotcoco/crates/hotcoco-pyo3
     pip install maturin
     maturin develop --release
     ```
@@ -35,8 +35,8 @@ This installs the `coco-eval` binary.
 
 ??? info "Build from source"
     ```bash
-    git clone https://github.com/derekallman/coco-rust.git
-    cd coco-rust
+    git clone https://github.com/derekallman/hotcoco.git
+    cd hotcoco
     cargo build --release
     # Binary is at target/release/coco-eval
     ```

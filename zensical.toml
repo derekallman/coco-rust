@@ -1,9 +1,9 @@
 [project]
 site_name = "hotcoco"
-site_url = "https://derekallman.github.io/coco-rust/"
+site_url = "https://derekallman.github.io/hotcoco/"
 site_description = "A drop-in replacement for pycocotools, 11-26x faster."
-repo_url = "https://github.com/derekallman/coco-rust"
-repo_name = "derekallman/coco-rust"
+repo_url = "https://github.com/derekallman/hotcoco"
+repo_name = "derekallman/hotcoco"
 
 nav = [
   { "Home" = "index.md" },
