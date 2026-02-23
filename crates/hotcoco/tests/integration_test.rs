@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use coco_rs::params::IouType;
-use coco_rs::types::{Annotation, Category, Dataset, Image};
-use coco_rs::{COCOeval, COCO};
+use hotcoco::params::IouType;
+use hotcoco::types::{Annotation, Category, Dataset, Image};
+use hotcoco::{COCOeval, COCO};
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")

@@ -5,7 +5,7 @@ Run COCO evaluation to compute AP/AR metrics.
 === "Python"
 
     ```python
-    from coco_rs import COCO, COCOeval
+    from hotcoco import COCO, COCOeval
 
     coco_gt = COCO("instances_val2017.json")
     coco_dt = coco_gt.load_res("detections.json")
@@ -19,8 +19,8 @@ Run COCO evaluation to compute AP/AR metrics.
 === "Rust"
 
     ```rust
-    use coco_rs::{COCO, COCOeval};
-    use coco_rs::params::IouType;
+    use hotcoco::{COCO, COCOeval};
+    use hotcoco::params::IouType;
     use std::path::Path;
 
     let coco_gt = COCO::new(Path::new("instances_val2017.json"))?;

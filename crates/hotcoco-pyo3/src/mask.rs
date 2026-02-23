@@ -1,4 +1,4 @@
-use coco_core::mask as rmask;
+use hotcoco_core::mask as rmask;
 use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -14,7 +14,7 @@ pub fn encode(py: Python<'_>, mask: PyReadonlyArray2<u8>, h: u32, w: u32) -> PyR
             "mask shape must match (h, w)",
         ));
     }
-    // Convert row-major numpy to column-major for coco_core
+    // Convert row-major numpy to column-major for hotcoco_core
     let mut col_major = vec![0u8; (h as usize) * (w as usize)];
     let mask_slice = mask.as_slice()?;
     for y in 0..h as usize {
@@ -59,7 +59,7 @@ pub fn to_bbox(rle: &Bound<'_, PyDict>) -> PyResult<Vec<f64>> {
 #[pyfunction]
 #[pyo3(signature = (rles, intersect = false))]
 pub fn merge(py: Python<'_>, rles: Vec<Bound<'_, PyDict>>, intersect: bool) -> PyResult<PyObject> {
-    let rles: Vec<coco_core::Rle> = rles.iter().map(py_to_rle).collect::<PyResult<_>>()?;
+    let rles: Vec<hotcoco_core::Rle> = rles.iter().map(py_to_rle).collect::<PyResult<_>>()?;
     let result = rmask::merge(&rles, intersect);
     rle_to_py(py, &result)
 }
@@ -70,8 +70,8 @@ pub fn iou(
     gt: Vec<Bound<'_, PyDict>>,
     iscrowd: Vec<bool>,
 ) -> PyResult<Vec<Vec<f64>>> {
-    let dt_rles: Vec<coco_core::Rle> = dt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
-    let gt_rles: Vec<coco_core::Rle> = gt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
+    let dt_rles: Vec<hotcoco_core::Rle> = dt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
+    let gt_rles: Vec<hotcoco_core::Rle> = gt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
     Ok(rmask::iou(&dt_rles, &gt_rles, &iscrowd))
 }
 

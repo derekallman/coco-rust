@@ -20,7 +20,7 @@ An RLE dict looks like:
 
     ```python
     import numpy as np
-    from coco_rs import mask
+    from hotcoco import mask
 
     # Create a binary mask
     m = np.zeros((100, 100), dtype=np.uint8)
@@ -40,7 +40,7 @@ An RLE dict looks like:
 === "Rust"
 
     ```rust
-    use coco_rs::mask;
+    use hotcoco::mask;
 
     // Create a binary mask (column-major order)
     let mut pixels = vec![0u8; 100 * 100];
@@ -173,7 +173,7 @@ The `COCO` class provides convenience methods to convert annotations directly:
 === "Python"
 
     ```python
-    from coco_rs import COCO
+    from hotcoco import COCO
 
     coco = COCO("instances_val2017.json")
     ann = coco.load_anns([101])[0]

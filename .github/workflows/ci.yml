@@ -55,7 +55,7 @@ jobs:
           pip install maturin numpy
 
       - name: Build Python extension
-        working-directory: crates/coco-pyo3
+        working-directory: crates/hotcoco-pyo3
         run: |
           source ../../.venv/bin/activate
           maturin develop --release
@@ -64,17 +64,17 @@ jobs:
         run: |
           source .venv/bin/activate
           python -c "
-          import coco_rs
+          import hotcoco
           import json, os
 
-          fixtures = 'crates/coco-rs/tests/fixtures'
+          fixtures = 'crates/hotcoco/tests/fixtures'
           gt_path = os.path.join(fixtures, 'gt.json')
           dt_path = os.path.join(fixtures, 'dt.json')
 
-          coco_gt = coco_rs.COCO(gt_path)
+          coco_gt = hotcoco.COCO(gt_path)
           coco_dt = coco_gt.loadRes(dt_path)
 
-          coco_eval = coco_rs.COCOeval(coco_gt, coco_dt, 'bbox')
+          coco_eval = hotcoco.COCOeval(coco_gt, coco_dt, 'bbox')
           coco_eval.evaluate()
           coco_eval.accumulate()
           coco_eval.summarize()

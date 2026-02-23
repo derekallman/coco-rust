@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/coco-rs", "crates/coco-cli", "crates/coco-pyo3"]
+members = ["crates/hotcoco", "crates/hotcoco-cli", "crates/hotcoco-pyo3"]
 resolver = "2"

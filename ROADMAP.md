@@ -20,7 +20,7 @@ Rust Core (all logic) ─┤
 |----------|---------|----------|
 | PyPI | `coco-kit` | Python library + Python CLI + compiled Rust core |
 | crates.io | `coco-kit` | Rust library |
-| crates.io | `coco-cli` | `coco-eval` binary (eval only, no Python) |
+| crates.io | `hotcoco-cli` | `coco-eval` binary (eval only, no Python) |
 
 ## Dataset Statistics
 

@@ -7,19 +7,19 @@ A complete COCO evaluation in under a minute.
 === "Python"
 
     ```bash
-    pip install coco-rs
+    pip install hotcoco
     ```
 
 === "Rust"
 
     ```bash
-    cargo add coco-rs
+    cargo add hotcoco
     ```
 
 === "CLI"
 
     ```bash
-    cargo install coco-cli
+    cargo install hotcoco-cli
     ```
 
 ## 2. Load ground truth
@@ -27,7 +27,7 @@ A complete COCO evaluation in under a minute.
 === "Python"
 
     ```python
-    from coco_rs import COCO
+    from hotcoco import COCO
 
     coco_gt = COCO("instances_val2017.json")
 
@@ -39,7 +39,7 @@ A complete COCO evaluation in under a minute.
 === "Rust"
 
     ```rust
-    use coco_rs::COCO;
+    use hotcoco::COCO;
     use std::path::Path;
 
     let coco_gt = COCO::new(Path::new("instances_val2017.json"))?;
@@ -84,7 +84,7 @@ Your results file should be a JSON array of detection dicts:
 === "Python"
 
     ```python
-    from coco_rs import COCOeval
+    from hotcoco import COCOeval
 
     ev = COCOeval(coco_gt, coco_dt, "bbox")
     ev.evaluate()
@@ -95,8 +95,8 @@ Your results file should be a JSON array of detection dicts:
 === "Rust"
 
     ```rust
-    use coco_rs::COCOeval;
-    use coco_rs::params::IouType;
+    use hotcoco::COCOeval;
+    use hotcoco::params::IouType;
 
     let mut ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
     ev.evaluate();

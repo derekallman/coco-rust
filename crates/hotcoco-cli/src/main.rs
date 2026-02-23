@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use coco_rs::params::IouType;
-use coco_rs::{COCOeval, COCO};
+use hotcoco::params::IouType;
+use hotcoco::{COCOeval, COCO};
 
 #[derive(Parser)]
 #[command(name = "coco-eval")]

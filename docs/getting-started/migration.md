@@ -1,6 +1,6 @@
 # Migrating from pycocotools
 
-coco-rust is a drop-in replacement for pycocotools. This guide covers the two migration paths and the few differences to be aware of.
+hotcoco is a drop-in replacement for pycocotools. This guide covers the two migration paths and the few differences to be aware of.
 
 ## Option 1: Change your imports
 
@@ -13,8 +13,8 @@ from pycocotools.cocoeval import COCOeval
 from pycocotools import mask as mask_util
 
 # After
-from coco_rs import COCO, COCOeval
-from coco_rs import mask as mask_util
+from hotcoco import COCO, COCOeval
+from hotcoco import mask as mask_util
 ```
 
 Everything else stays the same. The classes, methods, and return types are identical.
@@ -24,16 +24,16 @@ Everything else stays the same. The classes, methods, and return types are ident
 If pycocotools is imported by a library you don't control (e.g. mmdet, detectron2), call `init_as_pycocotools()` once at startup:
 
 ```python
-from coco_rs import init_as_pycocotools
+from hotcoco import init_as_pycocotools
 init_as_pycocotools()
 
-# All pycocotools imports now resolve to coco-rust
-from pycocotools.coco import COCO          # → coco_rs.COCO
-from pycocotools.cocoeval import COCOeval  # → coco_rs.COCOeval
-from pycocotools import mask               # → coco_rs.mask
+# All pycocotools imports now resolve to hotcoco
+from pycocotools.coco import COCO          # → hotcoco.COCO
+from pycocotools.cocoeval import COCOeval  # → hotcoco.COCOeval
+from pycocotools import mask               # → hotcoco.mask
 ```
 
-This patches `sys.modules` so that `pycocotools`, `pycocotools.coco`, `pycocotools.cocoeval`, and `pycocotools.mask` all resolve to their coco-rust equivalents.
+This patches `sys.modules` so that `pycocotools`, `pycocotools.coco`, `pycocotools.cocoeval`, and `pycocotools.mask` all resolve to their hotcoco equivalents.
 
 !!! tip
     Call `init_as_pycocotools()` before any `pycocotools` imports. The best place is the top of your entry point script.
@@ -42,7 +42,7 @@ This patches `sys.modules` so that `pycocotools`, `pycocotools.coco`, `pycocotoo
 
 Both camelCase and snake_case names are supported:
 
-| pycocotools (camelCase) | coco-rust (snake_case) | Notes |
+| pycocotools (camelCase) | hotcoco (snake_case) | Notes |
 |------------------------|----------------------|-------|
 | `getAnnIds()` | `get_ann_ids()` | Both work |
 | `getCatIds()` | `get_cat_ids()` | Both work |
@@ -58,7 +58,7 @@ The same applies to `Params` properties: `maxDets` / `max_dets`, `catIds` / `cat
 
 ## Return types
 
-coco-rust returns plain Python dicts and lists, matching pycocotools:
+hotcoco returns plain Python dicts and lists, matching pycocotools:
 
 ```python
 coco = COCO("instances_val2017.json")
@@ -83,7 +83,7 @@ ev.summarize()
 
 ## Known differences
 
-| Behavior | pycocotools | coco-rust |
+| Behavior | pycocotools | hotcoco |
 |----------|-------------|-----------|
 | Print on load | Prints "loading annotations..." to stdout | Silent |
 | `COCO()` with no args | Creates empty instance with print statements | Creates empty instance silently |

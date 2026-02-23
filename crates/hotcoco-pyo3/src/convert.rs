@@ -1,4 +1,4 @@
-use coco_core::{Annotation, Category, Image, Rle, Segmentation};
+use hotcoco_core::{Annotation, Category, Image, Rle, Segmentation};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -168,7 +168,7 @@ pub fn py_to_rle(dict: &Bound<'_, PyDict>) -> PyResult<Rle> {
         let size: [u32; 2] = size_obj.extract()?;
         let counts_obj = dict.get_item("counts")?.unwrap();
         if let Ok(s) = counts_obj.extract::<String>() {
-            return coco_core::mask::rle_from_string(&s, size[0], size[1])
+            return hotcoco_core::mask::rle_from_string(&s, size[0], size[1])
                 .map_err(pyo3::exceptions::PyValueError::new_err);
         }
         let counts: Vec<u32> = counts_obj.extract()?;

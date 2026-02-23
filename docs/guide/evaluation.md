@@ -1,6 +1,6 @@
 # Evaluation
 
-coco-rust supports three evaluation types: bounding box, segmentation, and keypoints. All three follow the same workflow.
+hotcoco supports three evaluation types: bounding box, segmentation, and keypoints. All three follow the same workflow.
 
 ## The three-step pipeline
 
@@ -9,7 +9,7 @@ Every COCO evaluation follows the same pattern:
 === "Python"
 
     ```python
-    from coco_rs import COCO, COCOeval
+    from hotcoco import COCO, COCOeval
 
     coco_gt = COCO("annotations.json")
     coco_dt = coco_gt.load_res("detections.json")
@@ -23,8 +23,8 @@ Every COCO evaluation follows the same pattern:
 === "Rust"
 
     ```rust
-    use coco_rs::{COCO, COCOeval};
-    use coco_rs::params::IouType;
+    use hotcoco::{COCO, COCOeval};
+    use hotcoco::params::IouType;
     use std::path::Path;
 
     let coco_gt = COCO::new(Path::new("annotations.json"))?;

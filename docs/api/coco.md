@@ -5,7 +5,7 @@ Load and query COCO-format datasets.
 === "Python"
 
     ```python
-    from coco_rs import COCO
+    from hotcoco import COCO
 
     coco = COCO("instances_val2017.json")
     ```
@@ -13,7 +13,7 @@ Load and query COCO-format datasets.
 === "Rust"
 
     ```rust
-    use coco_rs::COCO;
+    use hotcoco::COCO;
     use std::path::Path;
 
     let coco = COCO::new(Path::new("instances_val2017.json"))?;

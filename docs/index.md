@@ -1,6 +1,6 @@
 <div class="hero" markdown>
 
-# coco-rust
+# hotcoco
 
 <p class="hero-tagline">
 Drop-in replacement for pycocotools — 11-26x faster.
@@ -44,7 +44,7 @@ Drop-in replacement for pycocotools — 11-26x faster.
 === "Python"
 
     ```python
-    from coco_rs import COCO, COCOeval
+    from hotcoco import COCO, COCOeval
 
     coco_gt = COCO("instances_val2017.json")
     coco_dt = coco_gt.load_res("detections.json")
@@ -58,8 +58,8 @@ Drop-in replacement for pycocotools — 11-26x faster.
 === "Rust"
 
     ```rust
-    use coco_rs::{COCO, COCOeval};
-    use coco_rs::params::IouType;
+    use hotcoco::{COCO, COCOeval};
+    use hotcoco::params::IouType;
     use std::path::Path;
 
     let coco_gt = COCO::new(Path::new("instances_val2017.json"))?;
@@ -83,7 +83,7 @@ Benchmarked on COCO val2017 (5,000 images, 36,781 GT annotations, ~43,700 detect
 
 <div class="benchmark-table" markdown>
 
-| Eval Type | pycocotools | faster-coco-eval | coco-rust |
+| Eval Type | pycocotools | faster-coco-eval | hotcoco |
 |-----------|-------------|------------------|-----------|
 | bbox      | 11.79s      | 3.47s (3.4x)     | 0.74s (15.9x) |
 | segm      | 19.49s      | 10.52s (1.9x)    | 1.58s (12.3x) |
@@ -98,10 +98,10 @@ Speedups in parentheses are vs pycocotools. All metrics match within 0.003 (many
 Already using pycocotools? You don't need to touch your existing code:
 
 ```python
-from coco_rs import init_as_pycocotools
+from hotcoco import init_as_pycocotools
 init_as_pycocotools()
 
-# All pycocotools imports now use coco-rust
+# All pycocotools imports now use hotcoco
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 ```
@@ -110,7 +110,7 @@ See [Migrating from pycocotools](getting-started/migration.md) for the full guid
 
 ## Rust API
 
-For Rust users, the `coco-rs` crate is available on [crates.io](https://crates.io/crates/coco-rs). Full API documentation is on [docs.rs](https://docs.rs/coco-rs).
+For Rust users, the `hotcoco` crate is available on [crates.io](https://crates.io/crates/hotcoco). Full API documentation is on [docs.rs](https://docs.rs/hotcoco).
 
 ## License
 

@@ -1,5 +1,5 @@
 [package]
-name = "coco-rs"
+name = "hotcoco"
 version = "0.1.0"
 edition = "2021"
 description = "Rust implementation of pycocotools — COCO dataset API for object detection, segmentation, and keypoint evaluation"

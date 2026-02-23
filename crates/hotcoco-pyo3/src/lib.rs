@@ -15,13 +15,13 @@ use convert::{annotation_to_py, category_to_py, image_to_py, py_to_annotation, r
 
 #[pyclass(name = "COCO")]
 struct PyCOCO {
-    inner: coco_core::COCO,
+    inner: hotcoco_core::COCO,
 }
 
 impl Clone for PyCOCO {
     fn clone(&self) -> Self {
         PyCOCO {
-            inner: coco_core::COCO::from_dataset(self.inner.dataset.clone()),
+            inner: hotcoco_core::COCO::from_dataset(self.inner.dataset.clone()),
         }
     }
 }
@@ -33,12 +33,12 @@ impl PyCOCO {
     fn new(annotation_file: Option<&str>) -> PyResult<Self> {
         match annotation_file {
             Some(path) => {
-                let inner = coco_core::COCO::new(Path::new(path))
+                let inner = hotcoco_core::COCO::new(Path::new(path))
                     .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("{}", e)))?;
                 Ok(PyCOCO { inner })
             }
             None => {
-                let inner = coco_core::COCO::from_dataset(coco_core::Dataset {
+                let inner = hotcoco_core::COCO::from_dataset(hotcoco_core::Dataset {
                     info: None,
                     images: vec![],
                     annotations: vec![],
@@ -141,7 +141,7 @@ impl PyCOCO {
                 "Could not convert annotation to RLE (image not found?)",
             )
         })?;
-        let col_major = coco_core::mask::decode(&rle);
+        let col_major = hotcoco_core::mask::decode(&rle);
         let h = rle.h as usize;
         let w = rle.w as usize;
         let arr = unsafe { PyArray2::new(py, [h, w], false) };
@@ -262,7 +262,7 @@ impl PyCOCO {
 #[pyclass(name = "Params")]
 #[derive(Clone)]
 struct PyParams {
-    inner: coco_core::Params,
+    inner: hotcoco_core::Params,
 }
 
 #[pymethods]
@@ -272,16 +272,16 @@ impl PyParams {
     fn new(iou_type: &str) -> PyResult<Self> {
         let iou = parse_iou_type(iou_type)?;
         Ok(PyParams {
-            inner: coco_core::Params::new(iou),
+            inner: hotcoco_core::Params::new(iou),
         })
     }
 
     #[getter]
     fn iou_type(&self) -> &str {
         match self.inner.iou_type {
-            coco_core::IouType::Bbox => "bbox",
-            coco_core::IouType::Segm => "segm",
-            coco_core::IouType::Keypoints => "keypoints",
+            hotcoco_core::IouType::Bbox => "bbox",
+            hotcoco_core::IouType::Segm => "segm",
+            hotcoco_core::IouType::Keypoints => "keypoints",
         }
     }
 
@@ -473,11 +473,11 @@ impl PyParams {
     }
 }
 
-fn parse_iou_type(s: &str) -> PyResult<coco_core::IouType> {
+fn parse_iou_type(s: &str) -> PyResult<hotcoco_core::IouType> {
     match s {
-        "bbox" => Ok(coco_core::IouType::Bbox),
-        "segm" => Ok(coco_core::IouType::Segm),
-        "keypoints" => Ok(coco_core::IouType::Keypoints),
+        "bbox" => Ok(hotcoco_core::IouType::Bbox),
+        "segm" => Ok(hotcoco_core::IouType::Segm),
+        "keypoints" => Ok(hotcoco_core::IouType::Keypoints),
         _ => Err(pyo3::exceptions::PyValueError::new_err(format!(
             "Unknown iou_type: '{}'. Expected 'bbox', 'segm', or 'keypoints'",
             s
@@ -491,7 +491,7 @@ fn parse_iou_type(s: &str) -> PyResult<coco_core::IouType> {
 
 #[pyclass(name = "COCOeval")]
 struct PyCOCOeval {
-    inner: coco_core::COCOeval,
+    inner: hotcoco_core::COCOeval,
 }
 
 #[pymethods]
@@ -499,7 +499,7 @@ impl PyCOCOeval {
     #[new]
     fn new(coco_gt: &PyCOCO, coco_dt: &PyCOCO, iou_type: &str) -> PyResult<Self> {
         let iou = parse_iou_type(iou_type)?;
-        let inner = coco_core::COCOeval::new(coco_gt.clone().inner, coco_dt.clone().inner, iou);
+        let inner = hotcoco_core::COCOeval::new(coco_gt.clone().inner, coco_dt.clone().inner, iou);
         Ok(PyCOCOeval { inner })
     }
 
@@ -552,7 +552,10 @@ impl PyCOCOeval {
 // EvalImg / AccumulatedEval → Python converters
 // ---------------------------------------------------------------------------
 
-fn eval_imgs_to_py(py: Python<'_>, eval_imgs: &[Option<coco_core::EvalImg>]) -> PyResult<PyObject> {
+fn eval_imgs_to_py(
+    py: Python<'_>,
+    eval_imgs: &[Option<hotcoco_core::EvalImg>],
+) -> PyResult<PyObject> {
     let list = PyList::new(
         py,
         eval_imgs
@@ -566,7 +569,7 @@ fn eval_imgs_to_py(py: Python<'_>, eval_imgs: &[Option<coco_core::EvalImg>]) -> 
     Ok(list.into_any().unbind())
 }
 
-fn eval_img_to_py(py: Python<'_>, e: &coco_core::EvalImg) -> PyResult<PyObject> {
+fn eval_img_to_py(py: Python<'_>, e: &hotcoco_core::EvalImg) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     dict.set_item("image_id", e.image_id)?;
     dict.set_item("category_id", e.category_id)?;
@@ -590,7 +593,7 @@ fn eval_img_to_py(py: Python<'_>, e: &coco_core::EvalImg) -> PyResult<PyObject> 
 
 fn accumulated_eval_to_py(
     py: Python<'_>,
-    eval: &Option<coco_core::AccumulatedEval>,
+    eval: &Option<hotcoco_core::AccumulatedEval>,
 ) -> PyResult<PyObject> {
     match eval {
         None => Ok(py.None()),
@@ -630,22 +633,22 @@ fn accumulated_eval_to_py(
 // ---------------------------------------------------------------------------
 
 /// Patch `sys.modules` so that `from pycocotools.coco import COCO` etc.
-/// transparently use coco-rust.
+/// transparently use hotcoco.
 #[pyfunction]
 fn init_as_pycocotools(py: Python<'_>) -> PyResult<()> {
     let sys = py.import("sys")?;
     let modules = sys.getattr("modules")?;
-    let coco_rs = py.import("coco_rs")?;
-    let mask_mod = coco_rs.getattr("mask")?;
-    modules.set_item("pycocotools", &coco_rs)?;
-    modules.set_item("pycocotools.coco", &coco_rs)?;
-    modules.set_item("pycocotools.cocoeval", &coco_rs)?;
+    let hotcoco = py.import("hotcoco")?;
+    let mask_mod = hotcoco.getattr("mask")?;
+    modules.set_item("pycocotools", &hotcoco)?;
+    modules.set_item("pycocotools.coco", &hotcoco)?;
+    modules.set_item("pycocotools.cocoeval", &hotcoco)?;
     modules.set_item("pycocotools.mask", &mask_mod)?;
     Ok(())
 }
 
 #[pymodule]
-fn coco_rs(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn hotcoco(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCOCO>()?;
     m.add_class::<PyCOCOeval>()?;
     m.add_class::<PyParams>()?;

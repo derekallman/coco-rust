@@ -5,13 +5,13 @@ Low-level mask operations on Run-Length Encoded (RLE) binary masks.
 === "Python"
 
     ```python
-    from coco_rs import mask
+    from hotcoco import mask
     ```
 
 === "Rust"
 
     ```rust
-    use coco_rs::mask;
+    use hotcoco::mask;
     ```
 
 For background on RLE and usage patterns, see the [Mask Operations](../guide/masks.md) guide.
@@ -40,7 +40,7 @@ Encode a binary mask to RLE.
 
     ```python
     import numpy as np
-    from coco_rs import mask
+    from hotcoco import mask
 
     m = np.zeros((100, 100), dtype=np.uint8)
     m[10:50, 20:80] = 1

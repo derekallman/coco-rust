@@ -1,4 +1,4 @@
-# coco-rust
+# hotcoco
 
 A drop-in replacement for [pycocotools](https://github.com/ppwwyyxx/cocoapi) — 11-26x faster COCO evaluation for object detection, segmentation, and keypoints.
 
@@ -10,7 +10,7 @@ Available as a **Python package**, **CLI tool**, and **Rust library**.
 
 Benchmarked on COCO val2017 (5,000 images, 36,781 ground truth annotations, ~43,700 detections), Apple M1 MacBook Air:
 
-| Eval Type | pycocotools | faster-coco-eval | coco-rust |
+| Eval Type | pycocotools | faster-coco-eval | hotcoco |
 |-----------|-------------|------------------|-----------|
 | bbox      | 11.79s      | 3.47s (3.4x)    | 0.74s (15.9x) |
 | segm      | 19.49s      | 10.52s (1.9x)   | 1.58s (12.3x) |
@@ -23,11 +23,11 @@ Speedups in parentheses are vs pycocotools. All metrics match pycocotools within
 ### Python
 
 ```bash
-pip install coco-rs
+pip install hotcoco
 ```
 
 ```python
-from coco_rs import COCO, COCOeval
+from hotcoco import COCO, COCOeval
 
 coco_gt = COCO("instances_val2017.json")
 coco_dt = coco_gt.load_res("detections.json")
@@ -43,7 +43,7 @@ ev.summarize()
 If you have existing code that imports from `pycocotools` and don't want to change every import, call `init_as_pycocotools()` once at startup:
 
 ```python
-from coco_rs import init_as_pycocotools
+from hotcoco import init_as_pycocotools
 init_as_pycocotools()
 
 # Existing code works unchanged
@@ -55,19 +55,19 @@ from pycocotools import mask
 ### CLI
 
 ```bash
-cargo install coco-cli
+cargo install hotcoco-cli
 coco-eval --gt annotations.json --dt detections.json --iou-type bbox
 ```
 
 ### Rust
 
 ```bash
-cargo add coco-rs
+cargo add hotcoco
 ```
 
 ```rust
-use coco_rs::{COCO, COCOeval};
-use coco_rs::params::IouType;
+use hotcoco::{COCO, COCOeval};
+use hotcoco::params::IouType;
 use std::path::Path;
 
 let coco_gt = COCO::new(Path::new("annotations.json"))?;

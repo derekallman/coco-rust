@@ -1,6 +1,6 @@
 # Working with Results
 
-Beyond the 12 summary metrics, coco-rust gives you access to per-image evaluation results and the full precision/recall arrays.
+Beyond the 12 summary metrics, hotcoco gives you access to per-image evaluation results and the full precision/recall arrays.
 
 ## Loading results
 

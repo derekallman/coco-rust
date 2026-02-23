@@ -5,7 +5,7 @@ The `coco-eval` command runs COCO evaluation from the terminal.
 ## Installation
 
 ```bash
-cargo install coco-cli
+cargo install hotcoco-cli
 ```
 
 ## Usage

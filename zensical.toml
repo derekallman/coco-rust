@@ -1,5 +1,5 @@
 [project]
-site_name = "coco-rust"
+site_name = "hotcoco"
 site_url = "https://derekallman.github.io/coco-rust/"
 site_description = "A drop-in replacement for pycocotools, 11-26x faster."
 repo_url = "https://github.com/derekallman/coco-rust"
