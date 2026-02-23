@@ -10,7 +10,7 @@ requires-python = ">=3.9"
 license = "MIT"
 authors = [{ name = "Derek Allman", email = "derek.allman@yahoo.com" }]
 keywords = ["coco", "object-detection", "evaluation", "computer-vision", "segmentation"]
-readme = "../../README.md"
+readme = "README.md"
 dependencies = ["numpy>=1.22"]
 classifiers = [
     "Development Status :: 4 - Beta",
