@@ -12,13 +12,6 @@ authors = [{ name = "Derek Allman", email = "derek.allman@yahoo.com" }]
 keywords = ["coco", "object-detection", "evaluation", "computer-vision", "segmentation"]
 readme = "README.md"
 dependencies = ["numpy>=1.22"]
-
-[project.optional-dependencies]
-dev = [
-    "pycocotools",
-    "faster-coco-eval",
-    "pytest",
-]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -32,6 +25,13 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pycocotools",
+    "faster-coco-eval",
+    "pytest",
 ]
 
 [project.urls]
