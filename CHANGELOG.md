@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - `COCO.stats()` — dataset health-check statistics: annotation counts, image dimensions, area distributions, per-category breakdowns
 - Dataset operations on `COCO`: `filter`, `merge` (classmethod), `split`, `sample`, `save`
-- Python CLI (`coco`) with subcommands: `stats`, `filter`, `merge`, `split`, `sample`
+- Python CLI (`coco`) with subcommands: `eval`, `stats`, `filter`, `merge`, `split`, `sample`
 
 ## [0.1.0] - 2025-06-15
 
