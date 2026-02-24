@@ -75,6 +75,125 @@ def cmd_stats(args):
     )
 
 
+def _load_coco(path):
+    """Load a COCO annotation file, printing errors and exiting on failure."""
+    try:
+        from hotcoco import COCO
+    except ImportError:
+        print("error: hotcoco is not installed", file=sys.stderr)
+        sys.exit(1)
+    try:
+        return COCO(path)
+    except Exception as e:
+        print(f"error loading {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _summary(coco, label):
+    """Print a one-line image/annotation count summary."""
+    n_imgs = len(coco.dataset["images"])
+    n_anns = len(coco.dataset["annotations"])
+    print(f"  {label}: {n_imgs:,} images, {n_anns:,} annotations")
+
+
+def cmd_filter(args):
+    coco = _load_coco(args.annotation_file)
+    n_imgs_before = len(coco.dataset["images"])
+    n_anns_before = len(coco.dataset["annotations"])
+
+    cat_ids = [int(x) for x in args.cat_ids.split(",")] if args.cat_ids else None
+    img_ids = [int(x) for x in args.img_ids.split(",")] if args.img_ids else None
+    area_rng = None
+    if args.area_rng:
+        parts = args.area_rng.split(",")
+        if len(parts) != 2:
+            print("error: --area-rng must be MIN,MAX", file=sys.stderr)
+            sys.exit(1)
+        area_rng = [float(parts[0]), float(parts[1])]
+
+    drop_empty = not args.keep_empty_images
+    result = coco.filter(cat_ids=cat_ids, img_ids=img_ids, area_rng=area_rng, drop_empty_images=drop_empty)
+    result.save(args.output)
+
+    n_imgs_after = len(result.dataset["images"])
+    n_anns_after = len(result.dataset["annotations"])
+    print(f"filter: {os.path.basename(args.annotation_file)} → {os.path.basename(args.output)}")
+    print(f"  before: {n_imgs_before:,} images, {n_anns_before:,} annotations")
+    print(f"  after:  {n_imgs_after:,} images, {n_anns_after:,} annotations")
+
+
+def cmd_merge(args):
+    try:
+        from hotcoco import COCO
+    except ImportError:
+        print("error: hotcoco is not installed", file=sys.stderr)
+        sys.exit(1)
+
+    cocos = [_load_coco(f) for f in args.files]
+    n_imgs_total = sum(len(c.dataset["images"]) for c in cocos)
+    n_anns_total = sum(len(c.dataset["annotations"]) for c in cocos)
+
+    try:
+        merged = COCO.merge(cocos)
+    except Exception as e:
+        print(f"error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    merged.save(args.output)
+    n_imgs_out = len(merged.dataset["images"])
+    n_anns_out = len(merged.dataset["annotations"])
+    print(f"merge: {len(args.files)} files → {os.path.basename(args.output)}")
+    print(f"  input total: {n_imgs_total:,} images, {n_anns_total:,} annotations")
+    print(f"  output:      {n_imgs_out:,} images, {n_anns_out:,} annotations")
+
+
+def cmd_split(args):
+    coco = _load_coco(args.annotation_file)
+    n_imgs = len(coco.dataset["images"])
+
+    test_frac = args.test_frac if args.test_frac else None
+    result = coco.split(val_frac=args.val_frac, test_frac=test_frac, seed=args.seed)
+
+    if test_frac is not None:
+        train, val, test = result
+        splits = [("train", train), ("val", val), ("test", test)]
+    else:
+        train, val = result
+        splits = [("train", train), ("val", val)]
+
+    print(f"split: {os.path.basename(args.annotation_file)} ({n_imgs:,} images)")
+    for name, split in splits:
+        out_path = f"{args.output}_{name}.json"
+        split.save(out_path)
+        n = len(split.dataset["images"])
+        n_anns = len(split.dataset["annotations"])
+        print(f"  {name}: {n:,} images, {n_anns:,} annotations → {os.path.basename(out_path)}")
+
+
+def cmd_sample(args):
+    coco = _load_coco(args.annotation_file)
+    n_imgs_before = len(coco.dataset["images"])
+    n_anns_before = len(coco.dataset["annotations"])
+
+    n = args.n
+    frac = args.frac
+    if n is None and frac is None:
+        print("error: provide --n or --frac", file=sys.stderr)
+        sys.exit(1)
+    if n is not None and frac is not None:
+        print("error: provide either --n or --frac, not both", file=sys.stderr)
+        sys.exit(1)
+
+    result = coco.sample(n=n, frac=frac, seed=args.seed)
+    result.save(args.output)
+
+    n_imgs_after = len(result.dataset["images"])
+    n_anns_after = len(result.dataset["annotations"])
+    print(f"sample: {os.path.basename(args.annotation_file)} → {os.path.basename(args.output)}")
+    print(f"  before: {n_imgs_before:,} images, {n_anns_before:,} annotations")
+    print(f"  after:  {n_imgs_after:,} images, {n_anns_after:,} annotations")
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="coco",
@@ -96,6 +215,62 @@ def main():
         help="show all categories instead of top 20",
     )
 
+    filter_parser = subparsers.add_parser(
+        "filter",
+        help="filter a dataset by category, image, or area",
+    )
+    filter_parser.add_argument("annotation_file", help="input COCO JSON file")
+    filter_parser.add_argument("-o", "--output", required=True, help="output JSON file")
+    filter_parser.add_argument(
+        "--cat-ids", metavar="1,2,3", help="comma-separated category IDs to keep"
+    )
+    filter_parser.add_argument(
+        "--img-ids", metavar="1,2,3", help="comma-separated image IDs to keep"
+    )
+    filter_parser.add_argument(
+        "--area-rng", metavar="MIN,MAX", help="annotation area range (inclusive)"
+    )
+    filter_parser.add_argument(
+        "--keep-empty-images",
+        action="store_true",
+        help="keep images with no matching annotations",
+    )
+
+    merge_parser = subparsers.add_parser(
+        "merge",
+        help="merge multiple datasets into one",
+    )
+    merge_parser.add_argument("files", nargs="+", help="input COCO JSON files")
+    merge_parser.add_argument("-o", "--output", required=True, help="output JSON file")
+
+    split_parser = subparsers.add_parser(
+        "split",
+        help="split a dataset into train/val[/test] subsets",
+    )
+    split_parser.add_argument("annotation_file", help="input COCO JSON file")
+    split_parser.add_argument(
+        "-o", "--output", required=True,
+        metavar="PREFIX",
+        help="output prefix; writes <prefix>_train.json, <prefix>_val.json, [<prefix>_test.json]",
+    )
+    split_parser.add_argument(
+        "--val-frac", type=float, default=0.2, help="fraction of images for validation (default 0.2)"
+    )
+    split_parser.add_argument(
+        "--test-frac", type=float, default=None, help="fraction of images for test set (optional)"
+    )
+    split_parser.add_argument("--seed", type=int, default=42, help="random seed (default 42)")
+
+    sample_parser = subparsers.add_parser(
+        "sample",
+        help="sample a random subset of images",
+    )
+    sample_parser.add_argument("annotation_file", help="input COCO JSON file")
+    sample_parser.add_argument("-o", "--output", required=True, help="output JSON file")
+    sample_parser.add_argument("--n", type=int, default=None, help="number of images to sample")
+    sample_parser.add_argument("--frac", type=float, default=None, help="fraction of images to sample")
+    sample_parser.add_argument("--seed", type=int, default=42, help="random seed (default 42)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -104,6 +279,14 @@ def main():
 
     if args.command == "stats":
         cmd_stats(args)
+    elif args.command == "filter":
+        cmd_filter(args)
+    elif args.command == "merge":
+        cmd_merge(args)
+    elif args.command == "split":
+        cmd_split(args)
+    elif args.command == "sample":
+        cmd_sample(args)
 
 
 if __name__ == "__main__":

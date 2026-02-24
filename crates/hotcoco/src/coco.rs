@@ -385,6 +385,283 @@ impl COCO {
         self.ann_to_rle(ann).map(|rle| mask::decode(&rle))
     }
 
+    /// Filter the dataset, returning a new `Dataset` with matching images, annotations, and categories.
+    ///
+    /// Annotations are kept when they match **all** provided criteria. If `drop_empty_images` is
+    /// `true`, images with no matching annotations are removed; otherwise all images are kept
+    /// (intersected with `img_ids` if provided).
+    pub fn filter(
+        &self,
+        cat_ids: Option<&[u64]>,
+        img_ids: Option<&[u64]>,
+        area_rng: Option<[f64; 2]>,
+        drop_empty_images: bool,
+    ) -> Dataset {
+        let filtered_anns: Vec<Annotation> = self
+            .dataset
+            .annotations
+            .iter()
+            .filter(|ann| {
+                if let Some(cids) = cat_ids {
+                    if !cids.contains(&ann.category_id) {
+                        return false;
+                    }
+                }
+                if let Some(iids) = img_ids {
+                    if !iids.contains(&ann.image_id) {
+                        return false;
+                    }
+                }
+                if let Some(rng) = area_rng {
+                    let a = ann.area.unwrap_or(0.0);
+                    if a < rng[0] || a > rng[1] {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        let img_ids_with_anns: std::collections::HashSet<u64> =
+            filtered_anns.iter().map(|a| a.image_id).collect();
+
+        let filtered_images: Vec<Image> = self
+            .dataset
+            .images
+            .iter()
+            .filter(|img| {
+                if drop_empty_images {
+                    img_ids_with_anns.contains(&img.id)
+                } else if let Some(iids) = img_ids {
+                    iids.contains(&img.id)
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect();
+
+        let cat_ids_used: std::collections::HashSet<u64> =
+            filtered_anns.iter().map(|a| a.category_id).collect();
+        let filtered_cats: Vec<Category> = self
+            .dataset
+            .categories
+            .iter()
+            .filter(|cat| cat_ids_used.contains(&cat.id))
+            .cloned()
+            .collect();
+
+        Dataset {
+            info: self.dataset.info.clone(),
+            images: filtered_images,
+            annotations: filtered_anns,
+            categories: filtered_cats,
+            licenses: self.dataset.licenses.clone(),
+        }
+    }
+
+    /// Merge multiple datasets into one.
+    ///
+    /// All datasets must share the same category taxonomy (same names + supercategories).
+    /// Image and annotation IDs are remapped to ensure global uniqueness.
+    pub fn merge(datasets: &[&Dataset]) -> Result<Dataset, String> {
+        if datasets.is_empty() {
+            return Ok(Dataset {
+                info: None,
+                images: vec![],
+                annotations: vec![],
+                categories: vec![],
+                licenses: vec![],
+            });
+        }
+
+        let canonical_cats = &datasets[0].categories;
+        let canonical_key_to_id: HashMap<(String, Option<String>), u64> = canonical_cats
+            .iter()
+            .map(|c| ((c.name.clone(), c.supercategory.clone()), c.id))
+            .collect();
+
+        // Build per-dataset category ID remaps (dataset[0] is identity)
+        let mut cat_remaps: Vec<HashMap<u64, u64>> = Vec::new();
+        let identity: HashMap<u64, u64> = canonical_cats.iter().map(|c| (c.id, c.id)).collect();
+        cat_remaps.push(identity);
+
+        for ds in datasets.iter().skip(1) {
+            if ds.categories.len() != canonical_cats.len() {
+                return Err(format!(
+                    "Cannot merge: datasets have different numbers of categories ({} vs {})",
+                    canonical_cats.len(),
+                    ds.categories.len()
+                ));
+            }
+            let mut remap = HashMap::new();
+            for cat in &ds.categories {
+                let key = (cat.name.clone(), cat.supercategory.clone());
+                match canonical_key_to_id.get(&key) {
+                    Some(&canonical_id) => {
+                        remap.insert(cat.id, canonical_id);
+                    }
+                    None => {
+                        return Err(format!(
+                            "Cannot merge: category '{}' not found in first dataset",
+                            cat.name
+                        ));
+                    }
+                }
+            }
+            cat_remaps.push(remap);
+        }
+
+        let mut all_images: Vec<Image> = Vec::new();
+        let mut all_anns: Vec<Annotation> = Vec::new();
+        let mut current_max_img_id: u64 = 0;
+        let mut current_max_ann_id: u64 = 0;
+
+        for (i, ds) in datasets.iter().enumerate() {
+            let img_offset = current_max_img_id;
+            let ann_offset = current_max_ann_id;
+            let cat_remap = &cat_remaps[i];
+
+            for img in &ds.images {
+                let mut new_img = img.clone();
+                new_img.id = img.id + img_offset;
+                all_images.push(new_img);
+            }
+
+            for ann in &ds.annotations {
+                let mut new_ann = ann.clone();
+                new_ann.id = ann.id + ann_offset;
+                new_ann.image_id = ann.image_id + img_offset;
+                new_ann.category_id = *cat_remap.get(&ann.category_id).unwrap_or(&ann.category_id);
+                all_anns.push(new_ann);
+            }
+
+            let max_img = ds.images.iter().map(|img| img.id).max().unwrap_or(0) + img_offset;
+            let max_ann = ds.annotations.iter().map(|a| a.id).max().unwrap_or(0) + ann_offset;
+            current_max_img_id = max_img;
+            current_max_ann_id = max_ann;
+        }
+
+        Ok(Dataset {
+            info: datasets[0].info.clone(),
+            images: all_images,
+            annotations: all_anns,
+            categories: canonical_cats.clone(),
+            licenses: datasets[0].licenses.clone(),
+        })
+    }
+
+    /// Split the dataset into train/val (and optionally test) subsets.
+    ///
+    /// Images are shuffled deterministically using `seed`, then partitioned.
+    /// All splits share the full category list.
+    pub fn split(
+        &self,
+        val_frac: f64,
+        test_frac: Option<f64>,
+        seed: u64,
+    ) -> (Dataset, Dataset, Option<Dataset>) {
+        use rand::seq::SliceRandom;
+        use rand::SeedableRng;
+
+        let mut img_ids: Vec<u64> = self.dataset.images.iter().map(|img| img.id).collect();
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+        img_ids.shuffle(&mut rng);
+
+        let n = img_ids.len();
+        let n_val = ((n as f64 * val_frac).round() as usize).min(n);
+        let n_test = test_frac
+            .map(|f| ((n as f64 * f).round() as usize).min(n.saturating_sub(n_val)))
+            .unwrap_or(0);
+        let n_train = n.saturating_sub(n_val + n_test);
+
+        let train_ids = &img_ids[..n_train];
+        let val_ids = &img_ids[n_train..n_train + n_val];
+        let test_ids = if test_frac.is_some() {
+            Some(&img_ids[n_train + n_val..])
+        } else {
+            None
+        };
+
+        let build_split = |ids: &[u64]| {
+            let id_set: std::collections::HashSet<u64> = ids.iter().copied().collect();
+            let images: Vec<Image> = self
+                .dataset
+                .images
+                .iter()
+                .filter(|img| id_set.contains(&img.id))
+                .cloned()
+                .collect();
+            let annotations: Vec<Annotation> = self
+                .dataset
+                .annotations
+                .iter()
+                .filter(|ann| id_set.contains(&ann.image_id))
+                .cloned()
+                .collect();
+            Dataset {
+                info: self.dataset.info.clone(),
+                images,
+                annotations,
+                categories: self.dataset.categories.clone(),
+                licenses: self.dataset.licenses.clone(),
+            }
+        };
+
+        let train = build_split(train_ids);
+        let val = build_split(val_ids);
+        let test = test_ids.map(build_split);
+
+        (train, val, test)
+    }
+
+    /// Sample a random subset of images (with their annotations).
+    ///
+    /// Provide either `n` (exact count) or `frac` (fraction of images).
+    /// The sample is deterministic given the same `seed`.
+    pub fn sample(&self, n: Option<usize>, frac: Option<f64>, seed: u64) -> Dataset {
+        use rand::seq::SliceRandom;
+        use rand::SeedableRng;
+
+        let total = self.dataset.images.len();
+        let count = match (n, frac) {
+            (Some(n), _) => n.min(total),
+            (None, Some(f)) => ((total as f64 * f) as usize).min(total),
+            (None, None) => total,
+        };
+
+        let mut img_ids: Vec<u64> = self.dataset.images.iter().map(|img| img.id).collect();
+        let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+        img_ids.shuffle(&mut rng);
+
+        let sampled_ids = &img_ids[..count];
+        let id_set: std::collections::HashSet<u64> = sampled_ids.iter().copied().collect();
+
+        let images: Vec<Image> = self
+            .dataset
+            .images
+            .iter()
+            .filter(|img| id_set.contains(&img.id))
+            .cloned()
+            .collect();
+        let annotations: Vec<Annotation> = self
+            .dataset
+            .annotations
+            .iter()
+            .filter(|ann| id_set.contains(&ann.image_id))
+            .cloned()
+            .collect();
+
+        Dataset {
+            info: self.dataset.info.clone(),
+            images,
+            annotations,
+            categories: self.dataset.categories.clone(),
+            licenses: self.dataset.licenses.clone(),
+        }
+    }
+
     /// Compute dataset health-check statistics.
     pub fn stats(&self) -> DatasetStats {
         let mut cat_ann_counts: HashMap<u64, usize> = HashMap::new();

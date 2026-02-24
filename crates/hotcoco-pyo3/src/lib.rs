@@ -2,7 +2,7 @@ use std::path::Path;
 
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyTuple, PyType};
 
 mod convert;
 mod mask;
@@ -161,6 +161,108 @@ impl PyCOCO {
     fn stats(&self, py: Python<'_>) -> PyResult<PyObject> {
         let s = self.inner.stats();
         dataset_stats_to_py(py, &s)
+    }
+
+    /// Filter the dataset by category, image, and/or annotation area.
+    ///
+    /// Returns a new `COCO` with matching annotations. Images with no matching
+    /// annotations are dropped unless `drop_empty_images=False`.
+    #[pyo3(signature = (cat_ids=None, img_ids=None, area_rng=None, drop_empty_images=true))]
+    fn filter(
+        &self,
+        cat_ids: Option<Vec<u64>>,
+        img_ids: Option<Vec<u64>>,
+        area_rng: Option<[f64; 2]>,
+        drop_empty_images: bool,
+    ) -> PyCOCO {
+        let result = self.inner.filter(
+            cat_ids.as_deref(),
+            img_ids.as_deref(),
+            area_rng,
+            drop_empty_images,
+        );
+        PyCOCO {
+            inner: hotcoco_core::COCO::from_dataset(result),
+        }
+    }
+
+    /// Merge a list of `COCO` datasets into one.
+    ///
+    /// All datasets must share the same category taxonomy (same names and supercategories).
+    /// Image and annotation IDs are remapped to be globally unique.
+    /// Raises `ValueError` if the taxonomies differ.
+    #[classmethod]
+    fn merge(_cls: &Bound<'_, PyType>, datasets: Vec<PyRef<'_, PyCOCO>>) -> PyResult<PyCOCO> {
+        let ds_refs: Vec<&hotcoco_core::Dataset> =
+            datasets.iter().map(|p| &p.inner.dataset).collect();
+        let result =
+            hotcoco_core::COCO::merge(&ds_refs).map_err(pyo3::exceptions::PyValueError::new_err)?;
+        Ok(PyCOCO {
+            inner: hotcoco_core::COCO::from_dataset(result),
+        })
+    }
+
+    /// Split the dataset into train/val (or train/val/test) subsets.
+    ///
+    /// Returns a 2-tuple `(train, val)` or 3-tuple `(train, val, test)`.
+    /// The shuffle is deterministic for the same `seed`. All splits share the full category list.
+    #[pyo3(signature = (val_frac=0.2, test_frac=None, seed=42))]
+    fn split(
+        &self,
+        py: Python<'_>,
+        val_frac: f64,
+        test_frac: Option<f64>,
+        seed: u64,
+    ) -> PyResult<PyObject> {
+        let (train_ds, val_ds, test_ds) = self.inner.split(val_frac, test_frac, seed);
+        let train_py = Py::new(
+            py,
+            PyCOCO {
+                inner: hotcoco_core::COCO::from_dataset(train_ds),
+            },
+        )?;
+        let val_py = Py::new(
+            py,
+            PyCOCO {
+                inner: hotcoco_core::COCO::from_dataset(val_ds),
+            },
+        )?;
+        if let Some(test_ds) = test_ds {
+            let test_py = Py::new(
+                py,
+                PyCOCO {
+                    inner: hotcoco_core::COCO::from_dataset(test_ds),
+                },
+            )?;
+            Ok(PyTuple::new(py, [train_py, val_py, test_py])?
+                .into_any()
+                .unbind())
+        } else {
+            Ok(PyTuple::new(py, [train_py, val_py])?.into_any().unbind())
+        }
+    }
+
+    /// Sample a random subset of images with their annotations.
+    ///
+    /// Provide `n` for an exact count or `frac` for a fraction of total images.
+    /// The sample is deterministic for the same `seed`.
+    #[pyo3(signature = (n=None, frac=None, seed=42))]
+    fn sample(&self, n: Option<usize>, frac: Option<f64>, seed: u64) -> PyCOCO {
+        let result = self.inner.sample(n, frac, seed);
+        PyCOCO {
+            inner: hotcoco_core::COCO::from_dataset(result),
+        }
+    }
+
+    /// Serialize the dataset to a COCO-format JSON file.
+    fn save(&self, path: &str) -> PyResult<()> {
+        let file = std::fs::File::create(path)
+            .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+        let writer = std::io::BufWriter::new(file);
+        serde_json::to_writer_pretty(writer, &self.inner.dataset).map_err(
+            |e: serde_json::Error| pyo3::exceptions::PyValueError::new_err(e.to_string()),
+        )?;
+        Ok(())
     }
 
     // camelCase aliases for pycocotools compatibility

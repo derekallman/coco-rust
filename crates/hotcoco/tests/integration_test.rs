@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use hotcoco::params::IouType;
@@ -534,4 +535,218 @@ fn test_zero_based_ids_load_res() {
         vec![1, 2, 3],
         "load_res should assign 1-indexed IDs unconditionally"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Dataset operation tests: filter, merge, split, sample
+// ---------------------------------------------------------------------------
+
+/// gt.json: 3 images, 5 annotations, 2 categories (cat=1, dog=2)
+/// - img1: ann1(cat), ann2(dog)
+/// - img2: ann3(cat,area=1600), ann4(cat,area=400)
+/// - img3: ann5(dog,area=2500)
+
+#[test]
+fn test_filter_by_cat() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // Filter to cat_id=1 ("cat") only
+    let filtered = coco.filter(Some(&[1]), None, None, true);
+
+    // Annotations: 1(cat,img1), 3(cat,img2), 4(cat,img2) — 3 anns
+    assert_eq!(filtered.annotations.len(), 3);
+    // Images: img1 and img2 (img3 has only dog anns)
+    assert_eq!(filtered.images.len(), 2);
+    let img_ids: HashSet<u64> = filtered.images.iter().map(|i| i.id).collect();
+    assert!(img_ids.contains(&1));
+    assert!(img_ids.contains(&2));
+    // Categories: only "cat"
+    assert_eq!(filtered.categories.len(), 1);
+    assert_eq!(filtered.categories[0].name, "cat");
+}
+
+#[test]
+fn test_filter_drop_vs_keep_empty() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // Filter to cat_id=1 with drop_empty_images=false: all 3 images kept
+    let kept = coco.filter(Some(&[1]), None, None, false);
+    assert_eq!(kept.images.len(), 3);
+    assert_eq!(kept.annotations.len(), 3);
+
+    // Same filter with drop_empty_images=true: only images with cat anns
+    let dropped = coco.filter(Some(&[1]), None, None, true);
+    assert_eq!(dropped.images.len(), 2);
+    assert_eq!(dropped.annotations.len(), 3);
+}
+
+#[test]
+fn test_filter_area_rng() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // Keep only annotations with area in [500, 2000]
+    // gt.json areas: 400, 900, 1600, 400, 2500
+    // In range: 900(img1,dog), 1600(img2,cat)
+    let filtered = coco.filter(None, None, Some([500.0, 2000.0]), true);
+    assert_eq!(filtered.annotations.len(), 2);
+    for ann in &filtered.annotations {
+        let area = ann.area.unwrap_or(0.0);
+        assert!((500.0..=2000.0).contains(&area), "area {area} out of range");
+    }
+}
+
+#[test]
+fn test_merge_same_cats() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // Merge gt with a copy: should double images and annotations
+    let ds1 = &coco.dataset;
+    let ds2 = &coco.dataset;
+    let merged = COCO::merge(&[ds1, ds2]).expect("Merge should succeed");
+
+    // Image and annotation counts doubled
+    assert_eq!(merged.images.len(), ds1.images.len() * 2);
+    assert_eq!(merged.annotations.len(), ds1.annotations.len() * 2);
+
+    // All image IDs must be globally unique
+    let img_ids: HashSet<u64> = merged.images.iter().map(|i| i.id).collect();
+    assert_eq!(
+        img_ids.len(),
+        merged.images.len(),
+        "Image IDs must be unique"
+    );
+
+    // All annotation IDs must be globally unique
+    let ann_ids: HashSet<u64> = merged.annotations.iter().map(|a| a.id).collect();
+    assert_eq!(
+        ann_ids.len(),
+        merged.annotations.len(),
+        "Ann IDs must be unique"
+    );
+
+    // Categories unchanged
+    assert_eq!(merged.categories.len(), ds1.categories.len());
+}
+
+#[test]
+fn test_merge_different_cats_error() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // Build a dataset with a different category taxonomy
+    let mut ds2 = coco.dataset.clone();
+    ds2.categories[0].name = "horse".into();
+
+    let result = COCO::merge(&[&coco.dataset, &ds2]);
+    assert!(result.is_err(), "Merging different taxonomies should fail");
+}
+
+#[test]
+fn test_split_coverage() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    // 3 images, val_frac=0.33 → 1 val, 2 train (round(3*0.33)=1)
+    let (train, val, test) = coco.split(0.33, None, 42);
+    assert!(test.is_none());
+
+    let all_ids: HashSet<u64> = coco.dataset.images.iter().map(|i| i.id).collect();
+    let train_ids: HashSet<u64> = train.images.iter().map(|i| i.id).collect();
+    let val_ids: HashSet<u64> = val.images.iter().map(|i| i.id).collect();
+
+    // No overlap
+    assert!(
+        train_ids.is_disjoint(&val_ids),
+        "train and val must not overlap"
+    );
+    // Union covers all
+    let union: HashSet<u64> = train_ids.union(&val_ids).copied().collect();
+    assert_eq!(union, all_ids, "train+val must cover all images");
+
+    // Annotation image_ids all reference valid images in their split
+    for ann in &train.annotations {
+        assert!(train_ids.contains(&ann.image_id));
+    }
+    for ann in &val.annotations {
+        assert!(val_ids.contains(&ann.image_id));
+    }
+}
+
+#[test]
+fn test_split_determinism() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    let (train1, val1, _) = coco.split(0.33, None, 42);
+    let (train2, val2, _) = coco.split(0.33, None, 42);
+
+    let train1_ids: Vec<u64> = {
+        let mut v: Vec<u64> = train1.images.iter().map(|i| i.id).collect();
+        v.sort();
+        v
+    };
+    let train2_ids: Vec<u64> = {
+        let mut v: Vec<u64> = train2.images.iter().map(|i| i.id).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(train1_ids, train2_ids, "Same seed must produce same split");
+
+    let val1_ids: Vec<u64> = {
+        let mut v: Vec<u64> = val1.images.iter().map(|i| i.id).collect();
+        v.sort();
+        v
+    };
+    let val2_ids: Vec<u64> = {
+        let mut v: Vec<u64> = val2.images.iter().map(|i| i.id).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(val1_ids, val2_ids, "Same seed must produce same split");
+
+    // Different seed should produce a different partition (with high probability for this data)
+    let (train3, _, _) = coco.split(0.33, None, 99);
+    let train3_ids: Vec<u64> = {
+        let mut v: Vec<u64> = train3.images.iter().map(|i| i.id).collect();
+        v.sort();
+        v
+    };
+    // With 3 images and different seeds the shuffle may still coincide, but we at least
+    // verify it compiles and runs without error.
+    let _ = train3_ids;
+}
+
+#[test]
+fn test_sample_n() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    let sampled = coco.sample(Some(2), None, 42);
+    assert_eq!(sampled.images.len(), 2);
+
+    // All annotations belong to sampled images
+    let img_ids: HashSet<u64> = sampled.images.iter().map(|i| i.id).collect();
+    for ann in &sampled.annotations {
+        assert!(img_ids.contains(&ann.image_id));
+    }
+
+    // Categories preserved in full
+    assert_eq!(sampled.categories.len(), coco.dataset.categories.len());
+}
+
+#[test]
+fn test_sample_determinism() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let coco = COCO::new(&gt_path).expect("Failed to load GT");
+
+    let s1 = coco.sample(Some(2), None, 42);
+    let s2 = coco.sample(Some(2), None, 42);
+
+    let ids1: HashSet<u64> = s1.images.iter().map(|i| i.id).collect();
+    let ids2: HashSet<u64> = s2.images.iter().map(|i| i.id).collect();
+    assert_eq!(ids1, ids2, "Same seed must produce same sample");
 }
