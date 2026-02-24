@@ -24,18 +24,34 @@ Rust Core (all logic) ─┤
 
 ## Dataset Statistics
 
-Quick health check for any COCO dataset — annotation counts per category, image size distributions, area distributions, crowd/iscrowd breakdown. Available as `coco.stats()` in Python and `coco stats` in the Python CLI.
+**Shipped.** Quick health check for any COCO dataset — annotation counts per category, image size distributions, area distributions, crowd/iscrowd breakdown. Available as `coco.stats()` in Python and `coco stats` in the Python CLI.
 
 ## Dataset Operations
 
-Split, merge, filter, and sample COCO datasets:
+**Shipped.** Split, merge, filter, and sample COCO datasets:
 
-- **Filter** — subset by category, image ID, area range, or custom predicate
-- **Merge** — combine multiple annotation files (e.g., separate labeling batches)
-- **Split** — stratified train/val/test split preserving category distribution
-- **Sample** — random or deterministic subset for quick iteration
+- ~~**Filter** — subset by category, image ID, area range, or custom predicate~~
+- ~~**Merge** — combine multiple annotation files (e.g., separate labeling batches)~~
+- ~~**Split** — reproducible train/val/test split with deterministic shuffle~~
+- ~~**Sample** — random or deterministic subset for quick iteration~~
 
 All implemented in Rust core, exposed via Python CLI and Python API.
+
+## Extended Dataset Support
+
+Support for large-scale datasets that use the COCO annotation format but require evaluation tweaks. These are high-value targets because their scale makes pycocotools particularly painful — the speed advantage compounds.
+
+### Objects365
+
+Standard COCO evaluation protocol over 365 categories and ~2M images. Likely works today since it's standard COCO format; needs verification and explicit documentation. The main story here is scale: at O365 size, hotcoco's speed advantage is most dramatic.
+
+### LVIS (Large Vocabulary Instance Segmentation)
+
+~1,200 category long-tail dataset requiring **federated AP** evaluation — per-category results are computed independently across the subset of images that contain each category, rather than globally. Using standard pycocotools on LVIS gives subtly wrong numbers. Increasingly common in foundation model benchmarking (SAM, DINO, CLIP-based detectors).
+
+### CrowdPose
+
+Keypoint dataset for crowded scenes. Uses a modified OKS matching algorithm with a crowd factor to handle overlapping people. Requires a custom matching pass in the evaluator. Lower priority than LVIS/O365 but rounds out pose evaluation coverage.
 
 ## Format Conversion
 

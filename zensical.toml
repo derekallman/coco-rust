@@ -14,6 +14,7 @@ nav = [
   ] },
   { "User Guide" = [
     { "Evaluation" = "guide/evaluation.md" },
+    { "Dataset Operations" = "guide/datasets.md" },
     { "Working with Results" = "guide/results.md" },
     { "Mask Operations" = "guide/masks.md" },
   ] },
@@ -44,15 +45,15 @@ features = [
 
 [[project.theme.palette]]
 scheme = "slate"
-primary = "indigo"
-accent = "indigo"
+primary = "brown"
+accent = "deep-orange"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to light mode"
 
 [[project.theme.palette]]
 scheme = "default"
-primary = "indigo"
-accent = "indigo"
+primary = "brown"
+accent = "deep-orange"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to dark mode"
 

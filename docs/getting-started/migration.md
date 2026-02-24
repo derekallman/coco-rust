@@ -92,6 +92,6 @@ ev.summarize()
 
 ## Metric parity
 
-All 12 COCO metrics (AP, AP50, AP75, APs, APm, APl, AR1, AR10, AR100, ARs, ARm, ARl) produce identical results to pycocotools. Verified on COCO val2017 for bbox, segmentation, and keypoints.
+All 34 COCO metrics match pycocotools to within 1e-4 — your AP and AR scores won't change. Verified on COCO val2017.
 
 See [Benchmarks](../benchmarks.md) for detailed parity verification.

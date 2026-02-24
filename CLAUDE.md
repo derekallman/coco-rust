@@ -36,7 +36,7 @@ crates/hotcoco-pyo3/ # PyO3 Python bindings (cdylib, built with maturin)
 All 12 COCO evaluation metrics (AP, AP50, AP75, APs, APm, APl, AR1, AR10, AR100, ARs, ARm, ARl) must match pycocotools. Keypoints has 10 metrics (no small area range).
 
 - **Always ensure exact parity when modifying evaluation logic.** Run `cargo test` after Rust changes.
-- Verified on val2017: bbox exact, segm within 0.003, keypoints exact.
+- Verified on val2017: keypoints exact, bbox within 0.0001, segm within 0.0002.
 - When in doubt, run differential tests against pycocotools on real COCO data before declaring a task complete.
 
 ## Benchmarking
@@ -68,7 +68,7 @@ cargo fmt --all -- --check     # Check formatting
 
 # Python bindings (from crates/hotcoco-pyo3/)
 # One-time setup: uv venv && uv pip install maturin ".[dev]"
-maturin develop --release --uv  # Build + install into .venv
+uv run maturin develop --release  # Build + install into .venv
 ```
 
 ## Refactoring

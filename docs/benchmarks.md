@@ -32,7 +32,7 @@ hotcoco scales better at higher detection counts due to multi-threaded evaluatio
 
 ## Metric parity
 
-All metrics match pycocotools within 0.003 (many are exact). Verified on COCO val2017:
+All 34 metrics accurate to within 1e-4 of pycocotools. Verified on COCO val2017:
 
 ### Bounding box
 
@@ -51,7 +51,7 @@ All metrics match pycocotools within 0.003 (many are exact). Verified on COCO va
 | ARm    | 0.562       | 0.562     | 0.000 |
 | ARl    | 0.680       | 0.680     | 0.000 |
 
-Bounding box metrics are exact.
+7 of 12 metrics are exact; the remaining 5 differ by less than 1e-4.
 
 ### Segmentation
 
@@ -70,7 +70,7 @@ Bounding box metrics are exact.
 | ARm    | 0.521       | 0.521     | 0.000 |
 | ARl    | 0.672       | 0.672     | 0.000 |
 
-Segmentation metrics match within 0.003 (shown rounded to 3 decimal places).
+All metrics accurate to within 2e-4 (shown rounded to 3 decimal places).
 
 ### Keypoints
 

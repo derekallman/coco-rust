@@ -418,3 +418,263 @@ Convert an annotation to a binary mask.
         println!("pixels: {}", mask.len());
     }
     ```
+
+---
+
+### `stats`
+
+Compute dataset health-check statistics: annotation counts, image dimensions,
+annotation area distribution, and per-category breakdowns.
+
+=== "Python"
+
+    ```python
+    stats() -> dict
+    ```
+
+    Returns a dict with the following structure:
+
+    | Key | Type | Description |
+    |-----|------|-------------|
+    | `image_count` | `int` | Total number of images |
+    | `annotation_count` | `int` | Total number of annotations |
+    | `category_count` | `int` | Number of categories |
+    | `crowd_count` | `int` | Number of crowd annotations (`iscrowd=1`) |
+    | `per_category` | `list[dict]` | Per-category stats, sorted by `ann_count` descending |
+    | `image_width` | `dict` | Width summary stats (`min`, `max`, `mean`, `median`) |
+    | `image_height` | `dict` | Height summary stats |
+    | `annotation_area` | `dict` | Area summary stats |
+
+    Each `per_category` entry has keys `id`, `name`, `ann_count`, `img_count`, `crowd_count`.
+
+    ```python
+    s = coco.stats()
+    print(s["image_count"])        # 5000
+    print(s["annotation_count"])   # 36781
+
+    for cat in s["per_category"][:5]:
+        print(f"{cat['name']}: {cat['ann_count']} annotations")
+    ```
+
+=== "Rust"
+
+    ```rust
+    fn stats(&self) -> DatasetStats
+    ```
+
+    Returns a `DatasetStats` struct with fields mirroring the Python dict.
+
+    ```rust
+    let s = coco.stats();
+    println!("{} images", s.image_count);
+    println!("{} annotations", s.annotation_count);
+    for cat in &s.per_category {
+        println!("{}: {} anns", cat.name, cat.ann_count);
+    }
+    ```
+
+---
+
+## Dataset Operations
+
+The following methods reshape or subset a dataset, returning a new `COCO` object.
+The original is never modified. See the [Dataset Operations guide](../guide/datasets.md)
+for worked examples.
+
+---
+
+### `filter`
+
+Subset the dataset by category, image, and/or annotation area. All criteria are ANDed.
+
+=== "Python"
+
+    ```python
+    filter(
+        cat_ids: list[int] | None = None,
+        img_ids: list[int] | None = None,
+        area_rng: list[float] | None = None,
+        drop_empty_images: bool = True,
+    ) -> COCO
+    ```
+
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `cat_ids` | <code>list[int] &#124; None</code> | `None` | Keep only these category IDs |
+    | `img_ids` | <code>list[int] &#124; None</code> | `None` | Keep only these image IDs |
+    | `area_rng` | <code>list[float] &#124; None</code> | `None` | Area range `[min, max]` (inclusive) |
+    | `drop_empty_images` | `bool` | `True` | Remove images with no matching annotations |
+
+    ```python
+    person_id = coco.get_cat_ids(cat_nms=["person"])[0]
+    people = coco.filter(cat_ids=[person_id])
+    medium  = coco.filter(area_rng=[1024.0, 9216.0])
+    ```
+
+=== "Rust"
+
+    ```rust
+    fn filter(
+        &self,
+        cat_ids: Option<&[u64]>,
+        img_ids: Option<&[u64]>,
+        area_rng: Option<[f64; 2]>,
+        drop_empty_images: bool,
+    ) -> Dataset
+    ```
+
+    Returns a `Dataset`; wrap with `COCO::from_dataset()` to re-index.
+
+    ```rust
+    let people = COCO::from_dataset(coco.filter(Some(&[1]), None, None, true));
+    ```
+
+---
+
+### `merge`
+
+Merge a list of datasets into one. All datasets must share the same category
+taxonomy. Image and annotation IDs are remapped to be globally unique.
+
+Raises `ValueError` (Python) or returns `Err` (Rust) if taxonomies differ.
+
+=== "Python"
+
+    ```python
+    COCO.merge(datasets: list[COCO]) -> COCO  # classmethod
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `datasets` | `list[COCO]` | Two or more `COCO` objects with identical category sets |
+
+    ```python
+    batch1 = COCO("batch1.json")
+    batch2 = COCO("batch2.json")
+    combined = COCO.merge([batch1, batch2])
+    ```
+
+=== "Rust"
+
+    ```rust
+    fn merge(datasets: &[&Dataset]) -> Result<Dataset, String>
+    ```
+
+    ```rust
+    let combined = COCO::from_dataset(
+        COCO::merge(&[&ds1, &ds2]).expect("incompatible taxonomies")
+    );
+    ```
+
+---
+
+### `split`
+
+Split the dataset into train/val (or train/val/test) subsets. Images are shuffled
+deterministically; annotations follow their images. All splits share the full
+category list.
+
+=== "Python"
+
+    ```python
+    split(
+        val_frac: float = 0.2,
+        test_frac: float | None = None,
+        seed: int = 42,
+    ) -> tuple[COCO, COCO] | tuple[COCO, COCO, COCO]
+    ```
+
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `val_frac` | `float` | `0.2` | Fraction of images for validation |
+    | `test_frac` | <code>float &#124; None</code> | `None` | Fraction for a test set; omit for a two-way split |
+    | `seed` | `int` | `42` | Random seed for reproducibility |
+
+    ```python
+    train, val = coco.split(val_frac=0.2)
+    train, val, test = coco.split(val_frac=0.15, test_frac=0.15)
+    ```
+
+=== "Rust"
+
+    ```rust
+    fn split(
+        &self,
+        val_frac: f64,
+        test_frac: Option<f64>,
+        seed: u64,
+    ) -> (Dataset, Dataset, Option<Dataset>)
+    ```
+
+    ```rust
+    let (train, val, _) = coco.split(0.2, None, 42);
+    let train = COCO::from_dataset(train);
+    ```
+
+---
+
+### `sample`
+
+Draw a random subset of images with their annotations. The sample is deterministic
+for the same seed.
+
+=== "Python"
+
+    ```python
+    sample(
+        n: int | None = None,
+        frac: float | None = None,
+        seed: int = 42,
+    ) -> COCO
+    ```
+
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `n` | <code>int &#124; None</code> | `None` | Exact number of images to sample |
+    | `frac` | <code>float &#124; None</code> | `None` | Fraction of images to sample |
+    | `seed` | `int` | `42` | Random seed for reproducibility |
+
+    Provide either `n` or `frac`, not both.
+
+    ```python
+    subset = coco.sample(n=500, seed=0)
+    subset = coco.sample(frac=0.1, seed=0)
+    ```
+
+=== "Rust"
+
+    ```rust
+    fn sample(&self, n: Option<usize>, frac: Option<f64>, seed: u64) -> Dataset
+    ```
+
+    ```rust
+    let subset = COCO::from_dataset(coco.sample(Some(500), None, 0));
+    ```
+
+---
+
+### `save`
+
+Serialize the dataset to a COCO-format JSON file.
+
+=== "Python"
+
+    ```python
+    save(path: str) -> None
+    ```
+
+    ```python
+    coco.filter(cat_ids=[1]).sample(n=500, seed=0).save("person_sample.json")
+    ```
+
+=== "Rust"
+
+    `save` is a Python-only convenience method. In Rust, serialize with `serde_json`:
+
+    ```rust
+    use std::fs::File;
+    use std::io::BufWriter;
+
+    let file = BufWriter::new(File::create("output.json")?);
+    serde_json::to_writer_pretty(file, &coco.dataset)?;
+    ```

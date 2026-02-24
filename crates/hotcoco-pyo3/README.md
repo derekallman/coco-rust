@@ -1,8 +1,8 @@
 # hotcoco
 
-A drop-in replacement for [pycocotools](https://github.com/ppwwyyxx/cocoapi) — 11-26x faster COCO evaluation for object detection, segmentation, and keypoints.
+11-26x faster COCO evaluation — a drop-in replacement for [pycocotools](https://github.com/ppwwyyxx/cocoapi) that works with Ultralytics YOLO, Detectron2, mmdetection, RF-DETR, and any pycocotools-based pipeline.
 
-Available as a **Python package**, **CLI tool**, and **Rust library**.
+Available as a **Python package**, **CLI tool**, and **Rust library**. Pure Rust — no Cython, no C compiler, no Microsoft Build Tools. Prebuilt wheels for Linux, macOS, and Windows.
 
 **[Documentation](https://derekallman.github.io/hotcoco/)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](ROADMAP.md)**
 
@@ -16,7 +16,7 @@ Benchmarked on COCO val2017 (5,000 images, 36,781 ground truth annotations, ~43,
 | segm      | 19.49s      | 10.52s (1.9x)   | 1.58s (12.3x) |
 | keypoints | 4.79s       | 3.08s (1.6x)    | 0.19s (25.0x) |
 
-Speedups in parentheses are vs pycocotools. All metrics match pycocotools within 0.003 (many are exact).
+Speedups in parentheses are vs pycocotools. Results verified against pycocotools on COCO val2017 — your AP scores won't change.
 
 ## Quick Start
 
@@ -40,7 +40,7 @@ ev.summarize()
 
 #### Drop-in replacement for pycocotools
 
-If you have existing code that imports from `pycocotools` and don't want to change every import, call `init_as_pycocotools()` once at startup:
+If you use Detectron2, Ultralytics YOLO, mmdetection, or any other pycocotools-based pipeline, call `init_as_pycocotools()` once at startup — no other code changes needed:
 
 ```python
 from hotcoco import init_as_pycocotools

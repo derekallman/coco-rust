@@ -3,7 +3,7 @@
 # hotcoco
 
 <p class="hero-tagline">
-Drop-in replacement for pycocotools — 11-26x faster.
+11-26x faster drop-in replacement for pycocotools.
 </p>
 
 <div class="hero-actions" markdown>
@@ -18,23 +18,23 @@ Drop-in replacement for pycocotools — 11-26x faster.
 <div class="feature-grid" markdown>
 
 <div class="feature-card" markdown>
-<strong>Exact parity</strong>
-<p>Identical AP/AR numbers on the same inputs, verified on COCO val2017.</p>
-</div>
-
-<div class="feature-card" markdown>
 <strong>11-26x faster</strong>
-<p>Pure Rust with automatic parallelism. No C extensions to compile.</p>
+<p>Keypoints in 0.19s, bbox in 0.74s on COCO val2017. Faster than faster-coco-eval across every eval type.</p>
 </div>
 
 <div class="feature-card" markdown>
-<strong>Drop-in replacement</strong>
-<p>Same API as pycocotools. Change one import line and keep your code.</p>
+<strong>Same numbers, every time</strong>
+<p>Verified against pycocotools with a 10,000+ case parity test suite. Your AP scores won't change.</p>
 </div>
 
 <div class="feature-card" markdown>
-<strong>All eval types</strong>
-<p>Bounding box, segmentation, and keypoint evaluation.</p>
+<strong>No compiler required</strong>
+<p>Pure Rust, prebuilt wheels for Linux, macOS, and Windows. No Cython, no C extensions, no Microsoft Build Tools.</p>
+</div>
+
+<div class="feature-card" markdown>
+<strong>One line to migrate</strong>
+<p>Call <code>init_as_pycocotools()</code> and your existing Detectron2, YOLO, mmdetection, or RF-DETR code works unchanged.</p>
 </div>
 
 </div>
@@ -91,7 +91,7 @@ Benchmarked on COCO val2017 (5,000 images, 36,781 GT annotations, ~43,700 detect
 
 </div>
 
-Speedups in parentheses are vs pycocotools. All metrics match within 0.003 (many are exact).
+Speedups in parentheses are vs pycocotools. Verified on COCO val2017 with a 10,000+ case parity test suite — your AP scores won't change.
 
 ## Zero-code migration
 

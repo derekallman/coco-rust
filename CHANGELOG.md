@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `COCO.stats()` — dataset health-check statistics: annotation counts, image dimensions, area distributions, per-category breakdowns
+- Dataset operations on `COCO`: `filter`, `merge` (classmethod), `split`, `sample`, `save`
+- Python CLI (`coco`) with subcommands: `stats`, `filter`, `merge`, `split`, `sample`
+
 ## [0.1.0] - 2025-06-15
 
 ### Added
