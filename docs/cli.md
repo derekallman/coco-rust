@@ -13,6 +13,34 @@ hotcoco ships two CLI tools:
 pip install hotcoco
 ```
 
+### `coco eval`
+
+Evaluate detections against ground truth annotations. Prints the standard COCO metrics table.
+
+```bash
+coco eval --gt <gt.json> --dt <dt.json> [options]
+```
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--gt <path>` | Ground truth annotations JSON | *required* |
+| `--dt <path>` | Detection results JSON | *required* |
+| `--iou-type` | `bbox`, `segm`, or `keypoints` | `bbox` |
+| `--img-ids 1,2,3` | Evaluate only these image IDs | all |
+| `--cat-ids 1,2,3` | Evaluate only these category IDs | all |
+| `--no-cats` | Pool all categories (class-agnostic evaluation) | off |
+
+```bash
+# Bounding box evaluation
+coco eval --gt instances_val2017.json --dt bbox_results.json
+
+# Segmentation
+coco eval --gt instances_val2017.json --dt segm_results.json --iou-type segm
+
+# Keypoints
+coco eval --gt person_keypoints_val2017.json --dt kpt_results.json --iou-type keypoints
+```
+
 ### `coco stats`
 
 Print a health-check summary of a dataset: image and annotation counts, per-category

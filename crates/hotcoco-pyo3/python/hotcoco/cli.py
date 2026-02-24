@@ -2,7 +2,12 @@
 hotcoco command-line interface.
 
 Usage:
+    coco eval --gt <gt.json> --dt <dt.json> [--iou-type bbox|segm|keypoints]
     coco stats <annotation_file>
+    coco filter <file> -o <output> [options]
+    coco merge <file1> <file2> ... -o <output>
+    coco split <file> -o <prefix> [options]
+    coco sample <file> -o <output> [options]
 """
 
 import argparse
@@ -170,6 +175,39 @@ def cmd_split(args):
         print(f"  {name}: {n:,} images, {n_anns:,} annotations → {os.path.basename(out_path)}")
 
 
+def cmd_eval(args):
+    try:
+        from hotcoco import COCO, COCOeval
+    except ImportError:
+        print("error: hotcoco is not installed", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        gt = COCO(args.gt)
+    except Exception as e:
+        print(f"error loading ground truth: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        dt = gt.load_res(args.dt)
+    except Exception as e:
+        print(f"error loading detections: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    ev = COCOeval(gt, dt, args.iou_type)
+
+    if args.img_ids:
+        ev.params.imgIds = [int(x) for x in args.img_ids.split(",")]
+    if args.cat_ids:
+        ev.params.catIds = [int(x) for x in args.cat_ids.split(",")]
+    if args.no_cats:
+        ev.params.useCats = False
+
+    ev.evaluate()
+    ev.accumulate()
+    ev.summarize()
+
+
 def cmd_sample(args):
     coco = _load_coco(args.annotation_file)
     n_imgs_before = len(coco.dataset["images"])
@@ -200,6 +238,32 @@ def main():
         description="hotcoco command-line tools for COCO datasets",
     )
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
+
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="evaluate detections against ground truth",
+    )
+    eval_parser.add_argument("--gt", required=True, help="path to ground truth annotations JSON")
+    eval_parser.add_argument("--dt", required=True, help="path to detection results JSON")
+    eval_parser.add_argument(
+        "--iou-type",
+        dest="iou_type",
+        default="bbox",
+        choices=["bbox", "segm", "keypoints"],
+        help="evaluation type (default: bbox)",
+    )
+    eval_parser.add_argument(
+        "--img-ids", metavar="1,2,3", help="evaluate only these image IDs (comma-separated)"
+    )
+    eval_parser.add_argument(
+        "--cat-ids", metavar="1,2,3", help="evaluate only these category IDs (comma-separated)"
+    )
+    eval_parser.add_argument(
+        "--no-cats",
+        dest="no_cats",
+        action="store_true",
+        help="pool all categories (class-agnostic evaluation)",
+    )
 
     stats_parser = subparsers.add_parser(
         "stats",
@@ -277,7 +341,9 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    if args.command == "stats":
+    if args.command == "eval":
+        cmd_eval(args)
+    elif args.command == "stats":
         cmd_stats(args)
     elif args.command == "filter":
         cmd_filter(args)
