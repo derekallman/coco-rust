@@ -46,6 +46,15 @@ All 12 COCO evaluation metrics (AP, AP50, AP75, APs, APm, APl, AR1, AR10, AR100,
 - Format benchmark tables consistently: columns are `[Eval Type | pycocotools | faster-coco-eval | hotcoco]`, times in seconds with 2 decimal places, speedups in parentheses vs pycocotools.
 - Always verify all 12 metrics still match before reporting timing results.
 
+## Testing
+
+- Run `cargo test` after any Rust code changes and verify all tests pass before committing.
+- For Python binding changes, also run `maturin develop --release --uv && python -c 'import hotcoco'` as a smoke test.
+
+## Workflow Preferences
+
+- Before making large-scale changes (docs revamps, major refactors), present a concrete preview or small example for approval first. Do not rewrite everything at once.
+
 ## Build Commands
 
 ```bash
@@ -68,7 +77,8 @@ Use a task agent to find every file and line that references the old naming conv
 
 ## Documentation
 
-Before writing the full documentation, show me an outline with 2-3 example sections so I can confirm the tone, structure, and audience focus. Do not generate all pages until I approve.
+- This project targets Python users first, Rust users second. Documentation, README, and examples should lead with Python usage in a Python-first tone similar to Polars. Do not be Rust-centric.
+- Before writing the full documentation, show me an outline with 2-3 example sections so I can confirm the tone, structure, and audience focus. Do not generate all pages until I approve.
 
 When updating documentation (`docs/`) or `README.md`, always ensure both reflect the same information. Any change to one must be checked against the other — benchmark numbers, API examples, CLI flags, installation instructions, and feature descriptions must stay consistent across both.
 
@@ -93,4 +103,6 @@ If formatting fails, run `cargo fmt --all` to fix, then re-commit. If clippy fai
 ## Git Workflow
 
 - When committing and pushing, always verify the current git status first to avoid trying to commit already-committed changes. Check `git status` and `git log --oneline -3` before any commit/push operation.
+- Keep commits clean: never include build artifacts, compiled files, or `__pycache__` directories. Review staged files carefully before committing. If unsure, ask before committing.
+- Commit message body: use bullet points, not prose paragraphs.
 - Main branch: `main`.
