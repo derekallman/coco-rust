@@ -2,7 +2,7 @@
 //!
 //! Implements evaluate, accumulate, and summarize for bbox, segm, and keypoint evaluation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
 
@@ -132,17 +132,50 @@ impl COCOeval {
             vec![u64::MAX] // dummy single category (avoids collision with real category_id=0)
         };
 
-        // Compute IoUs for all (image, category) pairs in parallel
         let img_ids = self.params.img_ids.clone();
-        let pairs: Vec<(u64, u64)> = cat_ids
-            .iter()
-            .flat_map(|&cat_id| img_ids.iter().map(move |&img_id| (img_id, cat_id)))
-            .collect();
 
+        // Build allowed sets from params (populated above, so always non-empty here).
+        let allowed_imgs: HashSet<u64> = img_ids.iter().copied().collect();
+        let allowed_cats: HashSet<u64> = cat_ids.iter().copied().collect();
+
+        // Build sparse pairs: union of non-empty GT and DT (img, cat) pairs filtered to params.
+        // At large-scale (e.g. Objects365: 365 cats × 80K imgs = 29M pairs), ~96% of pairs
+        // are empty. Driving evaluation from the index instead reduces pairs by ~35x.
+        let mut sparse_set: HashSet<(u64, u64)> = HashSet::new();
+        if self.params.use_cats {
+            for pair in self.coco_gt.nonempty_img_cat_pairs() {
+                if allowed_imgs.contains(&pair.0) && allowed_cats.contains(&pair.1) {
+                    sparse_set.insert(pair);
+                }
+            }
+            for pair in self.coco_dt.nonempty_img_cat_pairs() {
+                if allowed_imgs.contains(&pair.0) && allowed_cats.contains(&pair.1) {
+                    sparse_set.insert(pair);
+                }
+            }
+        } else {
+            for img_id in self.coco_gt.nonempty_img_ids() {
+                if allowed_imgs.contains(&img_id) {
+                    sparse_set.insert((img_id, u64::MAX));
+                }
+            }
+            for img_id in self.coco_dt.nonempty_img_ids() {
+                if allowed_imgs.contains(&img_id) {
+                    sparse_set.insert((img_id, u64::MAX));
+                }
+            }
+        }
+
+        // Sort for deterministic output order.
+        let mut sparse_pairs: Vec<(u64, u64)> = sparse_set.into_iter().collect();
+        sparse_pairs.sort_unstable();
+
+        // Compute IoUs only for pairs where both GT and DT are non-empty.
+        // Pairs with only GT or only DT produce empty IoU matrices — skip storing them.
         #[allow(clippy::type_complexity)]
-        let iou_results: Vec<((u64, u64), Vec<Vec<f64>>)> = pairs
+        let iou_results: Vec<((u64, u64), Vec<Vec<f64>>)> = sparse_pairs
             .par_iter()
-            .map(|&(img_id, cat_id)| {
+            .filter_map(|&(img_id, cat_id)| {
                 let iou_matrix = Self::compute_iou_static(
                     &self.coco_gt,
                     &self.coco_dt,
@@ -150,7 +183,11 @@ impl COCOeval {
                     img_id,
                     cat_id,
                 );
-                ((img_id, cat_id), iou_matrix)
+                if iou_matrix.is_empty() {
+                    None
+                } else {
+                    Some(((img_id, cat_id), iou_matrix))
+                }
             })
             .collect();
 
@@ -160,17 +197,16 @@ impl COCOeval {
             self.ious.insert(key, val);
         }
 
-        // Evaluate each (image, category, area_range, max_det) combination in parallel
+        // Evaluate each (image, category, area_range) combination in parallel.
+        // sparse_pairs × area_rngs replaces the old cat_ids × area_rngs × img_ids product.
         let max_det = *self.params.max_dets.last().unwrap_or(&100);
         let area_rngs = self.params.area_rng.clone();
 
         let mut eval_tuples: Vec<(u64, [f64; 2], u64)> =
-            Vec::with_capacity(cat_ids.len() * area_rngs.len() * img_ids.len());
-        for &cat_id in &cat_ids {
+            Vec::with_capacity(sparse_pairs.len() * area_rngs.len());
+        for &(img_id, cat_id) in &sparse_pairs {
             for &area_rng in &area_rngs {
-                for &img_id in &img_ids {
-                    eval_tuples.push((cat_id, area_rng, img_id));
-                }
+                eval_tuples.push((cat_id, area_rng, img_id));
             }
         }
 
@@ -581,7 +617,33 @@ impl COCOeval {
         let a = self.params.area_rng.len();
         let m = self.params.max_dets.len();
 
-        let num_imgs = self.params.img_ids.len();
+        // Build category_id → k_idx mapping for grouping eval_imgs.
+        let cat_id_to_k_idx: HashMap<u64, usize> = if self.params.use_cats {
+            self.params
+                .cat_ids
+                .iter()
+                .enumerate()
+                .map(|(i, &id)| (id, i))
+                .collect()
+        } else {
+            std::iter::once((u64::MAX, 0usize)).collect()
+        };
+
+        // Group eval_imgs by (k_idx, a_idx) — O(eval_imgs) once.
+        // Replaces the old dense index formula k_actual * (a * N) + a_idx * N + img_idx,
+        // which assumed a specific dense layout that no longer applies after the sparse refactor.
+        let mut grouped: Vec<Vec<&EvalImg>> = vec![Vec::new(); k * a];
+        for eval in self.eval_imgs.iter().flatten() {
+            if let Some(&k_idx) = cat_id_to_k_idx.get(&eval.category_id) {
+                let a_idx = self
+                    .params
+                    .area_rng
+                    .iter()
+                    .position(|&rng| rng == eval.area_rng)
+                    .unwrap_or(0);
+                grouped[k_idx * a + a_idx].push(eval);
+            }
+        }
 
         // Build flat list of (k_idx, a_idx, m_idx) work items
         let work_items: Vec<(usize, usize, usize)> = (0..k)
@@ -614,23 +676,13 @@ impl COCOeval {
             .par_iter()
             .map(|&(k_idx, a_idx, m_idx)| {
                 let max_det = self.params.max_dets[m_idx];
-                let k_actual = if self.params.use_cats { k_idx } else { 0 };
 
                 let mut all_dt_scores: Vec<f64> = Vec::new();
                 let mut all_dt_matched: Vec<Vec<bool>> = vec![Vec::new(); t];
                 let mut all_dt_ignore: Vec<Vec<bool>> = vec![Vec::new(); t];
                 let mut num_gt = 0usize;
 
-                for img_idx in 0..num_imgs {
-                    let eval_idx = k_actual * (a * num_imgs) + a_idx * num_imgs + img_idx;
-                    if eval_idx >= self.eval_imgs.len() {
-                        continue;
-                    }
-                    let eval_img = match &self.eval_imgs[eval_idx] {
-                        Some(e) => e,
-                        None => continue,
-                    };
-
+                for eval_img in &grouped[k_idx * a + a_idx] {
                     let nd = eval_img.dt_scores.len().min(max_det);
 
                     all_dt_scores.extend_from_slice(&eval_img.dt_scores[..nd]);

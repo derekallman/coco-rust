@@ -258,6 +258,21 @@ impl COCO {
             .unwrap_or(&[])
     }
 
+    /// Returns (img_id, cat_id) pairs that have at least one annotation.
+    ///
+    /// Used by COCOeval to enumerate only non-empty pairs instead of the full
+    /// Cartesian product, which is critical for large-scale datasets.
+    pub fn nonempty_img_cat_pairs(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
+        self.img_cat_to_anns.keys().copied()
+    }
+
+    /// Returns image IDs that have at least one annotation (any category).
+    ///
+    /// Used by COCOeval when `use_cats = false` (all categories treated as one).
+    pub fn nonempty_img_ids(&self) -> impl Iterator<Item = u64> + '_ {
+        self.img_to_anns.keys().copied()
+    }
+
     /// Load detection/result annotations into a new COCO object.
     ///
     /// The result file can be a JSON array of annotation dicts, or a JSON object

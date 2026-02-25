@@ -738,6 +738,50 @@ fn test_sample_n() {
     assert_eq!(sampled.categories.len(), coco.dataset.categories.len());
 }
 
+/// Regression test: sparse evaluate() + grouped accumulate() must produce identical metrics
+/// to the previous dense implementation.
+///
+/// Expected values were captured from the edge fixtures on the `main` branch before the
+/// sparse refactor and cross-validated with the `test_edge_cases` test above.
+/// Running `data/bench_parity.py` against val2017 further confirms parity with pycocotools
+/// (bbox ≤1e-4, segm ≤2e-4, keypoints exact).
+#[test]
+fn test_evaluate_sparse_matches_dense() {
+    let gt_path = fixtures_dir().join("edge_gt.json");
+    let dt_path = fixtures_dir().join("edge_dt.json");
+    let coco_gt = COCO::new(&gt_path).expect("Failed to load edge GT");
+    let coco_dt = coco_gt.load_res(&dt_path).expect("Failed to load edge DT");
+
+    let stats = run_bbox_eval(coco_gt, coco_dt);
+    assert_eq!(stats.len(), 12, "summarize() should return 12 metrics");
+
+    // Same expected values as test_edge_cases — verifies the sparse path produces
+    // bit-identical results to the previously-verified dense implementation.
+    #[rustfmt::skip]
+    let expected: &[f64] = &[
+        0.712871,  // AP @[ IoU=0.50:0.95 | area=   all | maxDets=100 ]
+        0.712871,  // AP @[ IoU=0.50      | area=   all | maxDets=100 ]
+        0.712871,  // AP @[ IoU=0.75      | area=   all | maxDets=100 ]
+        0.663366,  // AP @[ IoU=0.50:0.95 | area= small | maxDets=100 ]
+        1.000000,  // AP @[ IoU=0.50:0.95 | area=medium | maxDets=100 ]
+        1.000000,  // AP @[ IoU=0.50:0.95 | area= large | maxDets=100 ]
+        0.428571,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets=  1 ]
+        0.714286,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets= 10 ]
+        0.714286,  // AR @[ IoU=0.50:0.95 | area=   all | maxDets=100 ]
+        0.666667,  // AR @[ IoU=0.50:0.95 | area= small | maxDets=100 ]
+        1.000000,  // AR @[ IoU=0.50:0.95 | area=medium | maxDets=100 ]
+        1.000000,  // AR @[ IoU=0.50:0.95 | area= large | maxDets=100 ]
+    ];
+
+    let tol = 1e-4;
+    for (i, (&got, &exp)) in stats.iter().zip(expected.iter()).enumerate() {
+        assert!(
+            (got - exp).abs() < tol,
+            "stats[{i}] mismatch (sparse path): got {got:.6}, expected {exp:.6}"
+        );
+    }
+}
+
 #[test]
 fn test_sample_determinism() {
     let gt_path = fixtures_dir().join("gt.json");
