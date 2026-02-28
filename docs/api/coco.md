@@ -306,25 +306,34 @@ Load images by their IDs.
 
 ### `load_res`
 
-Load detection results from a JSON file. Returns a new `COCO` object containing the detections, with images and categories copied from the ground truth.
+Load detection results into a new `COCO` object. Images and categories are copied from the ground truth. Missing fields (`area`, `segmentation`) are computed automatically.
 
 === "Python"
 
     ```python
-    load_res(res_file: str) -> COCO
+    load_res(res: str | list[dict] | np.ndarray) -> COCO
     ```
 
-    The results file should be a JSON array of detection dicts:
+    Three input formats are accepted:
 
-    ```json
-    [
-      {"image_id": 42, "category_id": 1, "bbox": [10, 20, 30, 40], "score": 0.95},
-      ...
-    ]
-    ```
-
+    **JSON file path:**
     ```python
     coco_dt = coco_gt.load_res("detections.json")
+    ```
+
+    **List of dicts (in-memory results):**
+    ```python
+    coco_dt = coco_gt.load_res([
+        {"image_id": 42, "category_id": 1, "bbox": [10, 20, 100, 80], "score": 0.95},
+    ])
+    ```
+
+    **NumPy array** — shape `(N, 7)` with columns `[image_id, x, y, w, h, score, category_id]`,
+    or `(N, 6)` with `category_id` defaulting to `1`. Array must be `float64`.
+    Matches pycocotools `loadNumpyAnnotations` convention:
+    ```python
+    arr = np.array([[42, 10, 20, 100, 80, 0.95, 1]], dtype=np.float64)
+    coco_dt = coco_gt.load_res(arr)
     ```
 
     !!! note "camelCase alias"
@@ -333,11 +342,16 @@ Load detection results from a JSON file. Returns a new `COCO` object containing 
 === "Rust"
 
     ```rust
+    // From a file
     fn load_res(&self, res_file: &Path) -> Result<COCO, Box<dyn Error>>
+
+    // From in-memory annotations
+    fn load_res_anns(&self, anns: Vec<Annotation>) -> Result<COCO, Box<dyn Error>>
     ```
 
     ```rust
     let coco_dt = coco_gt.load_res(Path::new("detections.json"))?;
+    let coco_dt = coco_gt.load_res_anns(my_annotations)?;
     ```
 
 !!! tip

@@ -102,6 +102,7 @@ If formatting fails, run `cargo fmt --all` to fix, then re-commit. If clippy fai
 
 ## Git Workflow
 
+- **Never commit or push unless explicitly asked.** Wait for the user to say "commit", "push", or "ship it" before running any git commit/push commands.
 - When committing and pushing, always verify the current git status first to avoid trying to commit already-committed changes. Check `git status` and `git log --oneline -3` before any commit/push operation.
 - Keep commits clean: never include build artifacts, compiled files, or `__pycache__` directories. Review staged files carefully before committing. If unsure, ask before committing.
 - Commit message body: use bullet points, not prose paragraphs.

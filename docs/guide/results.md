@@ -4,20 +4,50 @@ Beyond the 12 summary metrics, hotcoco gives you access to per-image evaluation 
 
 ## Loading results
 
-`load_res` reads a JSON file of detections and returns a new `COCO` object:
+`load_res` returns a new `COCO` object containing your detections, with images
+and categories copied from the ground truth. It accepts three input formats:
 
-=== "Python"
+=== "JSON file"
 
     ```python
     coco_gt = COCO("instances_val2017.json")
     coco_dt = coco_gt.load_res("detections.json")
     ```
 
+=== "List of dicts"
+
+    ```python
+    detections = [
+        {"image_id": 42, "category_id": 1, "bbox": [10, 20, 100, 80], "score": 0.95},
+        {"image_id": 42, "category_id": 3, "bbox": [200, 150, 60, 40], "score": 0.72},
+    ]
+    coco_dt = coco_gt.load_res(detections)
+    ```
+
+=== "NumPy array"
+
+    ```python
+    import numpy as np
+
+    # Shape (N, 7): [image_id, x, y, w, h, score, category_id]
+    arr = np.array([
+        [42, 10, 20, 100, 80, 0.95, 1],
+        [42, 200, 150, 60, 40, 0.72, 3],
+    ], dtype=np.float64)
+    coco_dt = coco_gt.load_res(arr)
+
+    # Shape (N, 6): category_id defaults to 1
+    coco_dt = coco_gt.load_res(arr[:, :6])
+    ```
+
 === "Rust"
 
     ```rust
-    let coco_gt = COCO::new(Path::new("instances_val2017.json"))?;
+    // From a file
     let coco_dt = coco_gt.load_res(Path::new("detections.json"))?;
+
+    // From in-memory annotations
+    let coco_dt = coco_gt.load_res_anns(my_annotations)?;
     ```
 
 `load_res` automatically computes missing fields based on the detection format:

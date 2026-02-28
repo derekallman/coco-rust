@@ -293,6 +293,19 @@ impl COCO {
             }
         };
 
+        self.load_res_anns(anns)
+    }
+
+    /// Load detection results from an already-parsed list of annotations.
+    ///
+    /// This is the in-memory equivalent of [`load_res`](Self::load_res). It applies
+    /// the same area, segmentation, and bbox fixups and returns a new `COCO` object
+    /// sharing the images and categories from `self`.
+    ///
+    /// Prefer this over `load_res` when results are already in memory — it avoids
+    /// a round-trip through the filesystem. The Python binding uses this internally
+    /// when `load_res` is called with a list of dicts or a numpy array.
+    pub fn load_res_anns(&self, anns: Vec<Annotation>) -> Result<COCO, Box<dyn std::error::Error>> {
         let mut dataset = Dataset {
             info: self.dataset.info.clone(),
             images: self.dataset.images.clone(),

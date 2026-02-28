@@ -4,6 +4,8 @@ use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple, PyType};
 
+use hotcoco_core::Annotation;
+
 mod convert;
 mod mask;
 
@@ -114,12 +116,92 @@ impl PyCOCO {
         Ok(list.into_any().unbind())
     }
 
-    fn load_res(&self, res_file: &str) -> PyResult<PyCOCO> {
-        let inner = self
-            .inner
-            .load_res(Path::new(res_file))
-            .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("{}", e)))?;
-        Ok(PyCOCO { inner })
+    /// Load detection results into a new COCO object.
+    ///
+    /// Accepts three input formats:
+    ///
+    /// - **str** — path to a JSON file containing a list of detection dicts.
+    /// - **list[dict]** — detection dicts already in memory.
+    /// - **numpy.ndarray** — float64 array of shape ``(N, 6)`` or ``(N, 7)``,
+    ///   with columns ``[image_id, x, y, w, h, score]`` or
+    ///   ``[image_id, x, y, w, h, score, category_id]``.
+    ///   Matches pycocotools ``loadNumpyAnnotations`` convention.
+    ///
+    /// Returns a new ``COCO`` object containing the detections, with images and
+    /// categories copied from the ground truth. Missing fields (``area``,
+    /// ``segmentation``) are computed automatically.
+    ///
+    /// Also available as ``loadRes()`` (camelCase alias).
+    fn load_res(&self, res: &Bound<'_, PyAny>) -> PyResult<PyCOCO> {
+        // Case 1: file path (str)
+        if let Ok(path) = res.extract::<String>() {
+            return self
+                .inner
+                .load_res(Path::new(&path))
+                .map(|inner| PyCOCO { inner })
+                .map_err(|e| pyo3::exceptions::PyIOError::new_err(format!("{e}")));
+        }
+
+        // Case 2: list of annotation dicts
+        if let Ok(list) = res.downcast::<PyList>() {
+            let anns = list
+                .iter()
+                .map(|item| {
+                    let dict = item.downcast::<PyDict>().map_err(|_| {
+                        pyo3::exceptions::PyTypeError::new_err(
+                            "load_res: list elements must be dicts",
+                        )
+                    })?;
+                    py_to_annotation(dict)
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            return self
+                .inner
+                .load_res_anns(anns)
+                .map(|inner| PyCOCO { inner })
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")));
+        }
+
+        // Case 3: numpy float64 array, shape (N, 6) or (N, 7)
+        //   (N, 6): [image_id, x, y, w, h, score]           — category_id defaults to 1
+        //   (N, 7): [image_id, x, y, w, h, score, cat_id]   — matches pycocotools loadNumpyAnnotations
+        if let Ok(arr) = res.downcast::<PyArray2<f64>>() {
+            let arr = arr.readonly();
+            let arr = arr.as_array();
+            let ncols = arr.ncols();
+            if ncols != 6 && ncols != 7 {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "load_res: numpy array must have 6 or 7 columns \
+                     [image_id, x, y, w, h, score[, category_id]], got {ncols}",
+                )));
+            }
+            let anns = arr
+                .rows()
+                .into_iter()
+                .map(|row| Annotation {
+                    id: 0,
+                    image_id: row[0] as u64,
+                    category_id: if ncols == 7 { row[6] as u64 } else { 1 },
+                    bbox: Some([row[1], row[2], row[3], row[4]]),
+                    score: Some(row[5]),
+                    area: None,
+                    segmentation: None,
+                    iscrowd: false,
+                    keypoints: None,
+                    num_keypoints: None,
+                })
+                .collect::<Vec<_>>();
+            return self
+                .inner
+                .load_res_anns(anns)
+                .map(|inner| PyCOCO { inner })
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(format!("{e}")));
+        }
+
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "load_res expects a file path (str), list of annotation dicts, \
+             or numpy float64 array of shape (N, 6) or (N, 7)",
+        ))
     }
 
     fn ann_to_rle(&self, py: Python<'_>, ann: &Bound<'_, PyDict>) -> PyResult<PyObject> {
@@ -311,8 +393,8 @@ impl PyCOCO {
     }
 
     #[pyo3(name = "loadRes")]
-    fn load_res_camel(&self, res_file: &str) -> PyResult<PyCOCO> {
-        self.load_res(res_file)
+    fn load_res_camel(&self, res: &Bound<'_, PyAny>) -> PyResult<PyCOCO> {
+        self.load_res(res)
     }
 
     #[pyo3(name = "annToRLE")]
