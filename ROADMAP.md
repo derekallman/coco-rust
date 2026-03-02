@@ -121,3 +121,66 @@ Lightweight per-sequence metric breakdowns for video object detection, surfacing
 Custom evaluation backend for [FiftyOne](https://github.com/voxel51/fiftyone) (Voxel51). FiftyOne's built-in COCO eval is slow and surfaces only the 12 standard metrics. A hotcoco backend would bring the speed advantage and expose TIDE error breakdowns and confusion matrices directly in the FiftyOne UI — metrics that don't exist in any other FiftyOne backend today. `init_as_pycocotools()` may already work as a zero-code path; the full backend adds discoverability and UI integration.
 
 Longer term, full multi-object tracking metrics — MOTA, HOTA, IDF1 — are worth exploring as a Phase 2 effort. TrackEval (the de-facto standard) is effectively unmaintained and slow; there's a real opening for a fast Rust alternative. This would be a meaningful scope expansion and is not planned for the near term, but the direction is intentional.
+
+### PyTorch Ecosystem Integrations
+
+Three drop-in utilities for PyTorch / torchvision training loops:
+
+- **`CocoEvaluator`** — distributed multi-GPU evaluator wrapping `COCOeval`. Follows the
+  torchvision reference pattern: `update()` → `synchronize_between_processes()` →
+  `accumulate()` → `summarize()`. Accepts `{image_id: {"boxes": Tensor, "scores": Tensor,
+  "labels": Tensor}}` dicts. Replaces the equivalent class in torchvision's detection
+  reference scripts with a faster backend.
+
+- **`CocoDetection`** — `torchvision.datasets.CocoDetection` subclass that uses hotcoco
+  instead of pycocotools. Near-trivial to implement via `init_as_pycocotools()`; the main
+  value is discoverability — users who `grep` for CocoDetection replacements find it.
+
+- **torchmetrics backend** — `MeanAveragePrecision(backend="hotcoco")` via a setuptools
+  entry point that torchmetrics discovers at runtime. One-word change in training code;
+  no other modifications needed.
+
+All three are low-effort to implement; the primary value is discoverability and documentation.
+
+### Experiment Tracking Integrations
+
+Logging COCO metrics to experiment trackers is boilerplate every practitioner rewrites. A
+`hotcoco.loggers` submodule with a `log_metrics(eval, logger, step=None)` helper would
+eliminate this, providing sensible default metric names (`eval/AP`, `eval/AP50`, etc.) and
+handling the flat dict format each platform expects:
+
+- **MLflow** — `mlflow.log_metrics()` expects a flat `{str: float}` dict. Helper maps all
+  active metrics (bbox, segm, or keypoints depending on `iou_type`) to prefixed keys and
+  calls `log_metrics` in one shot.
+
+- **Weights & Biases** — same flat dict via `wandb.log()`, with optional `step` and a
+  `prefix` argument so multi-task runs (bbox + segm) don't collide.
+
+- **TensorBoard** — `SummaryWriter.add_scalar()` must be called once per metric. Helper
+  iterates the results dict and handles the writer call loop, which is where most of the
+  per-project boilerplate lives.
+
+An optional `per_class=True` flag would additionally log per-category AP (e.g.
+`eval/AP/person`, `eval/AP/car`) — something no tracker integration in the ecosystem
+currently exposes despite the data being available inside `accumulate()`. Particularly
+useful for multi-class models where aggregate AP hides regressions on individual categories.
+
+Works with any framework (PyTorch, JAX, TensorFlow) — the only dependency is the tracker
+library itself, which is already present in the user's environment.
+
+### Hugging Face Integration
+
+Hugging Face's [`evaluate`](https://github.com/huggingface/evaluate) library has a metric
+backend concept — publish a `hotcoco` metric module and it shows up in hub search, gets
+discovered by anyone browsing COCO-related metrics, and slots into any HF training pipeline
+(Trainer, Accelerate, etc.) with a one-liner. COCO detection and segmentation metrics are
+among the most searched in `evaluate`; a faster, drop-in implementation is a natural fit.
+
+### Kaggle
+
+No formal plugin system, but Kaggle is high-traffic for object detection competitions that
+use COCO-format annotations. Two practical plays:
+
+- **Notebooks** — a public notebook on a popular COCO-format competition demonstrating
+  hotcoco eval gets surfaced in Kaggle search and "related notebooks," reaching a targeted
+  audience of practitioners who are already running COCO evaluation.
