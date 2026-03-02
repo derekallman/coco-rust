@@ -692,3 +692,97 @@ Serialize the dataset to a COCO-format JSON file.
     let file = BufWriter::new(File::create("output.json")?);
     serde_json::to_writer_pretty(file, &coco.dataset)?;
     ```
+
+---
+
+## Format Conversion
+
+### `to_yolo`
+
+Export the dataset to YOLO label format.
+
+=== "Python"
+
+    ```python
+    to_yolo(output_dir: str) -> dict
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `output_dir` | `str` | Directory to write label files and `data.yaml`. Created if it doesn't exist. |
+
+    Writes one `<stem>.txt` per image (normalized `class_idx cx cy w h` lines) and a
+    `data.yaml` with `nc` and `names`. Returns a stats dict:
+
+    | Key | Type | Description |
+    |-----|------|-------------|
+    | `images` | `int` | Number of images processed |
+    | `annotations` | `int` | Number of label lines written |
+    | `skipped_crowd` | `int` | Crowd annotations skipped |
+    | `missing_bbox` | `int` | Annotations without a bbox skipped |
+
+    ```python
+    coco = COCO("instances_val2017.json")
+    stats = coco.to_yolo("labels/val2017/")
+    print(stats)
+    # {'images': 5000, 'annotations': 36781, 'skipped_crowd': 12, 'missing_bbox': 0}
+    ```
+
+    Raises `RuntimeError` if any image has `width == 0` or `height == 0`.
+
+=== "Rust"
+
+    ```rust
+    use hotcoco::convert::{coco_to_yolo, YoloStats};
+    use std::path::Path;
+
+    let stats: YoloStats = coco_to_yolo(&coco.dataset, Path::new("labels/"))?;
+    println!("{} annotations written", stats.annotations);
+    ```
+
+---
+
+### `from_yolo`
+
+Load a YOLO label directory as a COCO dataset. Class method.
+
+=== "Python"
+
+    ```python
+    COCO.from_yolo(
+        yolo_dir: str,
+        images_dir: str | None = None,
+    ) -> COCO
+    ```
+
+    | Parameter | Type | Default | Description |
+    |-----------|------|---------|-------------|
+    | `yolo_dir` | `str` | *required* | Directory containing `.txt` label files and `data.yaml` |
+    | `images_dir` | <code>str &#124; None</code> | `None` | Source image directory; used by Pillow to read `width`/`height`. Requires `pip install Pillow`. |
+
+    ```python
+    # Without image dims (width/height stored as 0)
+    coco = COCO.from_yolo("labels/val2017/")
+
+    # With real image dimensions
+    coco = COCO.from_yolo("labels/val2017/", images_dir="images/val2017/")
+    coco.save("reconstructed.json")
+    ```
+
+    Raises `ImportError` if `images_dir` is given but Pillow is not installed.
+
+=== "Rust"
+
+    ```rust
+    use hotcoco::convert::yolo_to_coco;
+    use std::collections::HashMap;
+    use std::path::Path;
+
+    let dims: HashMap<String, (u32, u32)> = HashMap::new(); // or populate from image headers
+    let dataset = yolo_to_coco(Path::new("labels/"), &dims)?;
+    let coco = hotcoco::COCO::from_dataset(dataset);
+    ```
+
+!!! tip
+    See the [Format Conversion guide](../guide/datasets.md#convert) for a full
+    worked example including a round-trip and CLI usage.

@@ -1,6 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use hotcoco::convert::{coco_to_yolo, yolo_to_coco};
 use hotcoco::params::IouType;
 use hotcoco::types::{Annotation, Category, Dataset, Image};
 use hotcoco::{COCOeval, COCO};
@@ -1672,4 +1673,568 @@ fn test_tide_empty_category() {
         "delta_ap[Miss] should be 1.0, got {}",
         te.delta_ap["Miss"]
     );
+}
+
+// ---------------------------------------------------------------------------
+// COCO ↔ YOLO conversion tests
+// ---------------------------------------------------------------------------
+
+fn make_test_dataset_basic() -> Dataset {
+    Dataset {
+        info: None,
+        images: vec![
+            Image {
+                id: 1,
+                file_name: "img1.jpg".into(),
+                width: 100,
+                height: 200,
+                license: None,
+                coco_url: None,
+                flickr_url: None,
+                date_captured: None,
+                neg_category_ids: vec![],
+                not_exhaustive_category_ids: vec![],
+            },
+            Image {
+                id: 2,
+                file_name: "img2.jpg".into(),
+                width: 400,
+                height: 300,
+                license: None,
+                coco_url: None,
+                flickr_url: None,
+                date_captured: None,
+                neg_category_ids: vec![],
+                not_exhaustive_category_ids: vec![],
+            },
+        ],
+        annotations: vec![
+            Annotation {
+                id: 1,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([10.0, 20.0, 30.0, 40.0]),
+                area: Some(1200.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+            Annotation {
+                id: 2,
+                image_id: 1,
+                category_id: 2,
+                bbox: Some([50.0, 60.0, 20.0, 25.0]),
+                area: Some(500.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+            Annotation {
+                id: 3,
+                image_id: 2,
+                category_id: 1,
+                bbox: Some([0.0, 0.0, 200.0, 150.0]),
+                area: Some(30000.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+        ],
+        categories: vec![
+            Category {
+                id: 1,
+                name: "cat".into(),
+                supercategory: None,
+                skeleton: None,
+                keypoints: None,
+                frequency: None,
+            },
+            Category {
+                id: 2,
+                name: "dog".into(),
+                supercategory: None,
+                skeleton: None,
+                keypoints: None,
+                frequency: None,
+            },
+        ],
+        licenses: vec![],
+    }
+}
+
+#[test]
+fn test_coco_to_yolo_basic() {
+    let dataset = make_test_dataset_basic();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stats = coco_to_yolo(&dataset, dir.path()).expect("coco_to_yolo");
+
+    assert_eq!(stats.images, 2);
+    assert_eq!(stats.annotations, 3);
+    assert_eq!(stats.skipped_crowd, 0);
+    assert_eq!(stats.missing_bbox, 0);
+
+    // data.yaml
+    let yaml = std::fs::read_to_string(dir.path().join("data.yaml")).expect("data.yaml");
+    assert!(yaml.contains("nc: 2"), "yaml: {yaml}");
+    assert!(yaml.contains("names: [cat, dog]"), "yaml: {yaml}");
+
+    // img1.txt: 2 annotations
+    let txt1 = std::fs::read_to_string(dir.path().join("img1.txt")).expect("img1.txt");
+    let lines1: Vec<&str> = txt1.lines().collect();
+    assert_eq!(lines1.len(), 2, "img1.txt should have 2 lines");
+
+    // img2.txt: 1 annotation
+    let txt2 = std::fs::read_to_string(dir.path().join("img2.txt")).expect("img2.txt");
+    let lines2: Vec<&str> = txt2.lines().collect();
+    assert_eq!(lines2.len(), 1, "img2.txt should have 1 line");
+
+    // Spot-check: ann id=1, bbox=[10,20,30,40], img width=100, height=200
+    // cx = (10+15)/100 = 0.25, cy = (20+20)/200 = 0.2, w=0.3, h=0.2, class=0
+    let first_line = lines1[0];
+    let parts: Vec<f64> = first_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    assert!((parts[0] - 0.25).abs() < 1e-5, "cx mismatch: {}", parts[0]);
+    assert!((parts[1] - 0.2).abs() < 1e-5, "cy mismatch: {}", parts[1]);
+    assert!((parts[2] - 0.3).abs() < 1e-5, "nw mismatch: {}", parts[2]);
+    assert!((parts[3] - 0.2).abs() < 1e-5, "nh mismatch: {}", parts[3]);
+}
+
+#[test]
+fn test_coco_to_yolo_category_remapping() {
+    // COCO cat IDs {1, 3, 7} → YOLO class IDs {0, 1, 2} after sorting by ID
+    let dataset = Dataset {
+        info: None,
+        images: vec![Image {
+            id: 1,
+            file_name: "img.jpg".into(),
+            width: 200,
+            height: 200,
+            license: None,
+            coco_url: None,
+            flickr_url: None,
+            date_captured: None,
+            neg_category_ids: vec![],
+            not_exhaustive_category_ids: vec![],
+        }],
+        annotations: vec![
+            Annotation {
+                id: 1,
+                image_id: 1,
+                category_id: 7,
+                bbox: Some([10.0, 10.0, 40.0, 40.0]),
+                area: Some(1600.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+            Annotation {
+                id: 2,
+                image_id: 1,
+                category_id: 3,
+                bbox: Some([60.0, 60.0, 20.0, 20.0]),
+                area: Some(400.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+        ],
+        // Unsorted in dataset; coco_to_yolo must sort by ID
+        categories: vec![
+            Category {
+                id: 7,
+                name: "bird".into(),
+                supercategory: None,
+                skeleton: None,
+                keypoints: None,
+                frequency: None,
+            },
+            Category {
+                id: 1,
+                name: "cat".into(),
+                supercategory: None,
+                skeleton: None,
+                keypoints: None,
+                frequency: None,
+            },
+            Category {
+                id: 3,
+                name: "dog".into(),
+                supercategory: None,
+                skeleton: None,
+                keypoints: None,
+                frequency: None,
+            },
+        ],
+        licenses: vec![],
+    };
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    coco_to_yolo(&dataset, dir.path()).expect("coco_to_yolo");
+
+    let yaml = std::fs::read_to_string(dir.path().join("data.yaml")).expect("data.yaml");
+    // Sorted order: cat(1), dog(3), bird(7)
+    assert!(yaml.contains("names: [cat, dog, bird]"), "yaml: {yaml}");
+
+    let txt = std::fs::read_to_string(dir.path().join("img.txt")).expect("img.txt");
+    let lines: Vec<&str> = txt.lines().collect();
+    assert_eq!(lines.len(), 2);
+
+    // category_id=7 → class_idx=2 (sorted: cat→0, dog→1, bird→2)
+    let class0: usize = lines[0].split_whitespace().next().unwrap().parse().unwrap();
+    assert_eq!(
+        class0, 2,
+        "cat_id=7 should map to class_idx=2, got {class0}"
+    );
+
+    // category_id=3 → class_idx=1
+    let class1: usize = lines[1].split_whitespace().next().unwrap().parse().unwrap();
+    assert_eq!(
+        class1, 1,
+        "cat_id=3 should map to class_idx=1, got {class1}"
+    );
+}
+
+#[test]
+fn test_coco_to_yolo_crowd_skipped() {
+    let dataset = Dataset {
+        info: None,
+        images: vec![Image {
+            id: 1,
+            file_name: "img.jpg".into(),
+            width: 100,
+            height: 100,
+            license: None,
+            coco_url: None,
+            flickr_url: None,
+            date_captured: None,
+            neg_category_ids: vec![],
+            not_exhaustive_category_ids: vec![],
+        }],
+        annotations: vec![
+            Annotation {
+                id: 1,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([10.0, 10.0, 20.0, 20.0]),
+                area: Some(400.0),
+                iscrowd: true, // should be skipped
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+            Annotation {
+                id: 2,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([50.0, 50.0, 20.0, 20.0]),
+                area: Some(400.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+        ],
+        categories: vec![Category {
+            id: 1,
+            name: "thing".into(),
+            supercategory: None,
+            skeleton: None,
+            keypoints: None,
+            frequency: None,
+        }],
+        licenses: vec![],
+    };
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stats = coco_to_yolo(&dataset, dir.path()).expect("coco_to_yolo");
+
+    assert_eq!(stats.skipped_crowd, 1);
+    assert_eq!(stats.annotations, 1);
+
+    let txt = std::fs::read_to_string(dir.path().join("img.txt")).expect("img.txt");
+    assert_eq!(txt.lines().count(), 1, "only one non-crowd annotation");
+}
+
+#[test]
+fn test_coco_to_yolo_missing_bbox() {
+    let dataset = Dataset {
+        info: None,
+        images: vec![Image {
+            id: 1,
+            file_name: "img.jpg".into(),
+            width: 100,
+            height: 100,
+            license: None,
+            coco_url: None,
+            flickr_url: None,
+            date_captured: None,
+            neg_category_ids: vec![],
+            not_exhaustive_category_ids: vec![],
+        }],
+        annotations: vec![
+            Annotation {
+                id: 1,
+                image_id: 1,
+                category_id: 1,
+                bbox: None, // no bbox — should be skipped
+                area: Some(400.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+            Annotation {
+                id: 2,
+                image_id: 1,
+                category_id: 1,
+                bbox: Some([50.0, 50.0, 20.0, 20.0]),
+                area: Some(400.0),
+                iscrowd: false,
+                segmentation: None,
+                keypoints: None,
+                num_keypoints: None,
+                score: None,
+            },
+        ],
+        categories: vec![Category {
+            id: 1,
+            name: "thing".into(),
+            supercategory: None,
+            skeleton: None,
+            keypoints: None,
+            frequency: None,
+        }],
+        licenses: vec![],
+    };
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stats = coco_to_yolo(&dataset, dir.path()).expect("coco_to_yolo");
+
+    assert_eq!(stats.missing_bbox, 1);
+    assert_eq!(stats.annotations, 1);
+}
+
+#[test]
+fn test_coco_to_yolo_empty_image() {
+    // Image with no annotations → empty .txt must still be created
+    let dataset = Dataset {
+        info: None,
+        images: vec![Image {
+            id: 1,
+            file_name: "empty.jpg".into(),
+            width: 640,
+            height: 480,
+            license: None,
+            coco_url: None,
+            flickr_url: None,
+            date_captured: None,
+            neg_category_ids: vec![],
+            not_exhaustive_category_ids: vec![],
+        }],
+        annotations: vec![],
+        categories: vec![Category {
+            id: 1,
+            name: "thing".into(),
+            supercategory: None,
+            skeleton: None,
+            keypoints: None,
+            frequency: None,
+        }],
+        licenses: vec![],
+    };
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stats = coco_to_yolo(&dataset, dir.path()).expect("coco_to_yolo");
+
+    assert_eq!(stats.images, 1);
+    assert_eq!(stats.annotations, 0);
+
+    let txt_path = dir.path().join("empty.txt");
+    assert!(txt_path.exists(), "empty.txt should be created");
+    let content = std::fs::read_to_string(&txt_path).expect("empty.txt");
+    assert!(content.is_empty(), "empty.txt should have no content");
+}
+
+#[test]
+fn test_yolo_to_coco_basic() {
+    let dir = tempfile::tempdir().expect("tempdir");
+
+    // Write data.yaml
+    std::fs::write(dir.path().join("data.yaml"), "nc: 2\nnames: [cat, dog]\n")
+        .expect("write data.yaml");
+
+    // Write label files
+    std::fs::write(
+        dir.path().join("img1.txt"),
+        "0 0.250000 0.200000 0.300000 0.200000\n1 0.700000 0.725000 0.200000 0.250000\n",
+    )
+    .expect("write img1.txt");
+    std::fs::write(
+        dir.path().join("img2.txt"),
+        "0 0.250000 0.250000 0.500000 0.500000\n",
+    )
+    .expect("write img2.txt");
+
+    let dims: HashMap<String, (u32, u32)> = [
+        ("img1".to_string(), (100u32, 200u32)),
+        ("img2".to_string(), (400u32, 300u32)),
+    ]
+    .into_iter()
+    .collect();
+
+    let dataset = yolo_to_coco(dir.path(), &dims).expect("yolo_to_coco");
+
+    assert_eq!(dataset.images.len(), 2);
+    assert_eq!(dataset.annotations.len(), 3);
+    assert_eq!(dataset.categories.len(), 2);
+
+    // Categories: id=1→cat, id=2→dog
+    assert_eq!(dataset.categories[0].id, 1);
+    assert_eq!(dataset.categories[0].name, "cat");
+    assert_eq!(dataset.categories[1].id, 2);
+    assert_eq!(dataset.categories[1].name, "dog");
+
+    // Find the img1 image and check dims
+    let img1 = dataset
+        .images
+        .iter()
+        .find(|i| i.file_name == "img1")
+        .unwrap();
+    assert_eq!(img1.width, 100);
+    assert_eq!(img1.height, 200);
+
+    // Check bbox reconstruction for first annotation of img1:
+    // YOLO: class=0, cx=0.25, cy=0.2, w=0.3, h=0.2; image 100×200
+    // COCO: x=(0.25-0.15)*100=10, y=(0.2-0.2)*200=0... wait let me recalculate
+    // cx=0.25 → x = (0.25 - 0.3/2)*100 = (0.25-0.15)*100 = 10
+    // cy=0.20 → y = (0.20 - 0.2/2)*200 = (0.20-0.10)*200 = 20
+    // bw = 0.3*100 = 30, bh = 0.2*200 = 40
+    let ann = dataset
+        .annotations
+        .iter()
+        .find(|a| a.image_id == img1.id && a.category_id == 1)
+        .unwrap();
+    let bbox = ann.bbox.unwrap();
+    assert!((bbox[0] - 10.0).abs() < 1e-4, "x: {}", bbox[0]);
+    assert!((bbox[1] - 20.0).abs() < 1e-4, "y: {}", bbox[1]);
+    assert!((bbox[2] - 30.0).abs() < 1e-4, "w: {}", bbox[2]);
+    assert!((bbox[3] - 40.0).abs() < 1e-4, "h: {}", bbox[3]);
+}
+
+#[test]
+fn test_yolo_round_trip() {
+    let original = make_test_dataset_basic();
+    let dir = tempfile::tempdir().expect("tempdir");
+
+    // COCO → YOLO
+    coco_to_yolo(&original, dir.path()).expect("coco_to_yolo");
+
+    // Build image_dims from original dataset for the round-trip
+    let dims: HashMap<String, (u32, u32)> = original
+        .images
+        .iter()
+        .map(|img| {
+            let stem = std::path::Path::new(&img.file_name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(img.file_name.as_str())
+                .to_string();
+            (stem, (img.width, img.height))
+        })
+        .collect();
+
+    // YOLO → COCO
+    let recovered = yolo_to_coco(dir.path(), &dims).expect("yolo_to_coco");
+
+    // Categories must round-trip (sorted by original COCO ID)
+    assert_eq!(recovered.categories.len(), original.categories.len());
+
+    // Each annotation's bbox must round-trip within floating-point tolerance
+    assert_eq!(recovered.annotations.len(), original.annotations.len());
+
+    // Build a lookup of original bboxes by (image filename stem, category name)
+    // to compare against recovered bboxes
+    let cat_id_to_name: HashMap<u64, &str> = original
+        .categories
+        .iter()
+        .map(|c| (c.id, c.name.as_str()))
+        .collect();
+    let img_id_to_stem: HashMap<u64, String> = original
+        .images
+        .iter()
+        .map(|img| {
+            let stem = std::path::Path::new(&img.file_name)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or(img.file_name.as_str())
+                .to_string();
+            (img.id, stem)
+        })
+        .collect();
+
+    // Collect original (stem, cat_name, bbox) triples
+    let mut orig_bboxes: Vec<(String, String, [f64; 4])> = original
+        .annotations
+        .iter()
+        .map(|ann| {
+            let stem = img_id_to_stem[&ann.image_id].clone();
+            let cat = cat_id_to_name[&ann.category_id].to_string();
+            (stem, cat, ann.bbox.unwrap())
+        })
+        .collect();
+    orig_bboxes.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+
+    // Collect recovered (stem, cat_name, bbox) triples
+    let rec_cat_id_to_name: HashMap<u64, &str> = recovered
+        .categories
+        .iter()
+        .map(|c| (c.id, c.name.as_str()))
+        .collect();
+    let rec_img_id_to_stem: HashMap<u64, &str> = recovered
+        .images
+        .iter()
+        .map(|img| (img.id, img.file_name.as_str()))
+        .collect();
+
+    let mut rec_bboxes: Vec<(String, String, [f64; 4])> = recovered
+        .annotations
+        .iter()
+        .map(|ann| {
+            let stem = rec_img_id_to_stem[&ann.image_id].to_string();
+            let cat = rec_cat_id_to_name[&ann.category_id].to_string();
+            (stem, cat, ann.bbox.unwrap())
+        })
+        .collect();
+    rec_bboxes.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+
+    for ((o_stem, o_cat, o_bbox), (r_stem, r_cat, r_bbox)) in
+        orig_bboxes.iter().zip(rec_bboxes.iter())
+    {
+        assert_eq!(o_stem, r_stem, "stem mismatch");
+        assert_eq!(o_cat, r_cat, "category mismatch");
+        for i in 0..4 {
+            assert!(
+                (o_bbox[i] - r_bbox[i]).abs() < 1e-4,
+                "bbox[{i}] mismatch for {o_stem}/{o_cat}: orig={} recovered={}",
+                o_bbox[i],
+                r_bbox[i]
+            );
+        }
+    }
 }

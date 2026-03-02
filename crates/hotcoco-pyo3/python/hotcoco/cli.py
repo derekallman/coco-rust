@@ -8,6 +8,8 @@ Usage:
     coco merge <file1> <file2> ... -o <output>
     coco split <file> -o <prefix> [options]
     coco sample <file> -o <output> [options]
+    coco convert --from coco --to yolo --input <file> --output <dir>
+    coco convert --from yolo --to coco --input <dir> --output <file> [--images-dir <dir>]
 """
 
 import argparse
@@ -231,6 +233,56 @@ def _print_tide(te):
     print(f"  {'FN':<6}  {delta.get('FN', 0.0):>7.4f}")
 
 
+def cmd_convert(args):
+    from_fmt = args.from_fmt
+    to_fmt = args.to_fmt
+
+    if from_fmt == "coco" and to_fmt == "yolo":
+        coco = _load_coco(args.input)
+        try:
+            stats = coco.to_yolo(args.output)
+        except Exception as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"convert: COCO → YOLO")
+        print(f"  input:       {os.path.basename(args.input)}")
+        print(f"  output dir:  {args.output}")
+        print(f"  images:      {stats['images']:,}")
+        print(f"  annotations: {stats['annotations']:,}")
+        if stats["skipped_crowd"] > 0:
+            print(f"  skipped (crowd):   {stats['skipped_crowd']:,}")
+        if stats["missing_bbox"] > 0:
+            print(f"  skipped (no bbox): {stats['missing_bbox']:,}")
+
+    elif from_fmt == "yolo" and to_fmt == "coco":
+        try:
+            from hotcoco import COCO
+        except ImportError:
+            print("error: hotcoco is not installed", file=sys.stderr)
+            sys.exit(1)
+        try:
+            coco = COCO.from_yolo(args.input, images_dir=args.images_dir)
+        except Exception as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            coco.save(args.output)
+        except Exception as e:
+            print(f"error saving {args.output}: {e}", file=sys.stderr)
+            sys.exit(1)
+        n_imgs = len(coco.dataset["images"])
+        n_anns = len(coco.dataset["annotations"])
+        print(f"convert: YOLO → COCO")
+        print(f"  input dir:   {args.input}")
+        print(f"  output:      {os.path.basename(args.output)}")
+        print(f"  images:      {n_imgs:,}")
+        print(f"  annotations: {n_anns:,}")
+
+    else:
+        print(f"error: unsupported conversion: {from_fmt} → {to_fmt}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_sample(args):
     coco = _load_coco(args.annotation_file)
     n_imgs_before = len(coco.dataset["images"])
@@ -379,6 +431,41 @@ def main():
     sample_parser.add_argument("--frac", type=float, default=None, help="fraction of images to sample")
     sample_parser.add_argument("--seed", type=int, default=42, help="random seed (default 42)")
 
+    convert_parser = subparsers.add_parser(
+        "convert",
+        help="convert between annotation formats (COCO ↔ YOLO)",
+    )
+    convert_parser.add_argument(
+        "--from",
+        dest="from_fmt",
+        required=True,
+        choices=["coco", "yolo"],
+        help="source format",
+    )
+    convert_parser.add_argument(
+        "--to",
+        dest="to_fmt",
+        required=True,
+        choices=["coco", "yolo"],
+        help="target format",
+    )
+    convert_parser.add_argument(
+        "--input",
+        required=True,
+        help="input file (COCO JSON) or directory (YOLO labels)",
+    )
+    convert_parser.add_argument(
+        "--output",
+        required=True,
+        help="output file (COCO JSON) or directory (YOLO labels)",
+    )
+    convert_parser.add_argument(
+        "--images-dir",
+        dest="images_dir",
+        default=None,
+        help="directory of images (YOLO → COCO only; used to read image dimensions via Pillow)",
+    )
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -397,6 +484,8 @@ def main():
         cmd_split(args)
     elif args.command == "sample":
         cmd_sample(args)
+    elif args.command == "convert":
+        cmd_convert(args)
 
 
 if __name__ == "__main__":

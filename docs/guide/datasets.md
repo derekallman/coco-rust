@@ -167,15 +167,82 @@ coco.filter(cat_ids=[person_id]).sample(n=1000, seed=0).save("person_sample.json
 
 ---
 
+## convert
+
+Export a COCO dataset to YOLO label format, or import YOLO labels back to COCO.
+This is the most-used format pair in practice — every YOLO model trainer expects
+label files and a `data.yaml`, but evaluation and annotation tooling generally
+speaks COCO JSON.
+
+### COCO → YOLO
+
+```python
+from hotcoco import COCO
+
+coco = COCO("instances_val2017.json")
+stats = coco.to_yolo("labels/val2017/")
+print(stats)
+# {'images': 5000, 'annotations': 36781, 'skipped_crowd': 12, 'missing_bbox': 0}
+```
+
+`to_yolo` creates `labels/val2017/` (if it doesn't exist) and writes:
+
+- One `<stem>.txt` per image, where each line is `class_idx cx cy w h`
+  — all coordinates normalized to `[0, 1]` by image dimensions.
+- An empty `<stem>.txt` for images with no annotations (YOLO convention).
+- `data.yaml` with `nc` (category count) and an ordered `names` list.
+
+Category IDs are sorted numerically and assigned 0-indexed YOLO class IDs in
+that order: COCO ID 1 → class 0, ID 3 → class 1, ID 7 → class 2, etc.
+
+Crowd annotations and annotations without a bounding box are silently skipped
+and counted in the returned stats dict.
+
+### YOLO → COCO
+
+```python
+# Without image dimensions (width/height stored as 0)
+coco = COCO.from_yolo("labels/val2017/")
+
+# With image dimensions read from disk via Pillow
+coco = COCO.from_yolo("labels/val2017/", images_dir="images/val2017/")
+coco.save("reconstructed.json")
+print(f"{len(coco.dataset['images'])} images, {len(coco.dataset['annotations'])} annotations")
+```
+
+`from_yolo` reads `data.yaml` for the category list, then parses every `.txt`
+file in the directory. If `images_dir` is given, hotcoco uses Pillow to read
+each image's `(width, height)` — install it with `pip install Pillow` if needed.
+
+Without `images_dir`, bounding boxes are still parsed but stored relative to a
+`0×0` canvas. This is fine for inspection or re-evaluation, but tools that need
+pixel-space coordinates (visualization, `ann_to_mask`) will need real dims.
+
+### Round-trip
+
+COCO bbox values round-trip within floating-point precision (less than 0.0001 px
+error for typical image sizes):
+
+```python
+coco     = COCO("instances_val2017.json")
+stats    = coco.to_yolo("labels/")
+coco2    = COCO.from_yolo("labels/", images_dir="images/val2017/")
+coco2.save("reconstructed.json")
+```
+
+---
+
 ## CLI
 
-All four operations are available as `coco` subcommands — no Python required
+All operations are available as `coco` subcommands — no Python required
 beyond the initial install. See the [CLI reference](../cli.md) for full flag
 documentation.
 
 ```bash
-coco filter instances_val2017.json --cat-ids 1 -o person.json
-coco split  person.json --val-frac 0.2 -o splits/person
-coco sample person.json --n 500 --seed 0 -o person_sample.json
-coco merge  batch1.json batch2.json -o combined.json
+coco filter  instances_val2017.json --cat-ids 1 -o person.json
+coco split   person.json --val-frac 0.2 -o splits/person
+coco sample  person.json --n 500 --seed 0 -o person_sample.json
+coco merge   batch1.json batch2.json -o combined.json
+coco convert --from coco --to yolo --input instances_val2017.json --output labels/
+coco convert --from yolo --to coco --input labels/ --output reconstructed.json
 ```

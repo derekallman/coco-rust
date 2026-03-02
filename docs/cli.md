@@ -146,6 +146,43 @@ coco sample instances_val2017.json --n 500 --seed 0 -o sample.json
 coco sample instances_val2017.json --frac 0.1 -o sample.json
 ```
 
+### `coco convert`
+
+Convert between annotation formats. Currently supports COCO JSON ↔ YOLO labels.
+
+**COCO → YOLO:**
+
+```bash
+coco convert --from coco --to yolo --input <annotations.json> --output <labels_dir/>
+```
+
+**YOLO → COCO:**
+
+```bash
+coco convert --from yolo --to coco --input <labels_dir/> --output <annotations.json> [--images-dir <images/>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--from` | Source format: `coco` or `yolo` |
+| `--to` | Target format: `coco` or `yolo` |
+| `--input` | Input path — JSON file (COCO) or label directory (YOLO) |
+| `--output` | Output path — label directory (YOLO) or JSON file (COCO) |
+| `--images-dir` | *(YOLO → COCO only)* Directory of source images; used by Pillow to populate `width`/`height` on each image record. Requires `pip install Pillow`. |
+
+```bash
+# Export val2017 to YOLO labels
+coco convert --from coco --to yolo \
+    --input instances_val2017.json \
+    --output labels/val2017/
+
+# Import YOLO labels back (with image dims)
+coco convert --from yolo --to coco \
+    --input labels/val2017/ \
+    --output reconstructed.json \
+    --images-dir images/val2017/
+```
+
 ---
 
 ## `coco-eval` — Rust CLI

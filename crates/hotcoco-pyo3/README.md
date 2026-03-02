@@ -75,6 +75,30 @@ init_as_lvis()
 from lvis import LVIS, LVISEval, LVISResults  # resolves to hotcoco
 ```
 
+#### Format conversion
+
+Convert between COCO JSON and YOLO label format in either direction:
+
+```python
+from hotcoco import COCO
+
+# COCO → YOLO
+coco = COCO("instances_val2017.json")
+stats = coco.to_yolo("labels/val2017/")
+print(stats)  # {'images': 5000, 'annotations': 36781, 'skipped_crowd': 12, 'missing_bbox': 0}
+
+# YOLO → COCO (with Pillow to read image dims)
+coco2 = COCO.from_yolo("labels/val2017/", images_dir="images/val2017/")
+coco2.save("reconstructed.json")
+```
+
+Or from the CLI:
+
+```bash
+coco convert --from coco --to yolo --input annotations.json --output labels/
+coco convert --from yolo --to coco --input labels/ --output annotations.json --images-dir images/
+```
+
 #### TIDE error analysis
 
 `tide_errors()` decomposes every false positive and false negative into six error types — Localization, Classification, Duplicate, Background, Both, and Miss — and reports the ΔAP for each. Use it to understand *why* your model falls short, not just how much:

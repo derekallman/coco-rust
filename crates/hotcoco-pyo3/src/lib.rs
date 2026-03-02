@@ -411,6 +411,145 @@ impl PyCOCO {
         self.ann_to_mask(py, ann)
     }
 
+    /// Convert this dataset to YOLO label format.
+    ///
+    /// Writes one ``.txt`` label file per image into ``output_dir`` (named by
+    /// the image filename stem, e.g. ``000042.jpg`` → ``000042.txt``), plus a
+    /// ``data.yaml`` file listing the categories.
+    ///
+    /// Each label line: ``class_idx cx cy w h`` with coordinates normalized to
+    /// ``[0, 1]`` by image dimensions. Categories are sorted by COCO ID and
+    /// assigned 0-indexed class IDs. Crowd annotations and annotations without
+    /// a bounding box are skipped. Images with no annotations produce an empty
+    /// ``.txt`` file (standard YOLO convention).
+    ///
+    /// Parameters
+    /// ----------
+    /// output_dir : str
+    ///     Directory to write label files and ``data.yaml``. Created if it does
+    ///     not exist.
+    ///
+    /// Returns
+    /// -------
+    /// dict
+    ///     ``{"images": int, "annotations": int, "skipped_crowd": int, "missing_bbox": int}``
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If any image has ``width == 0`` or ``height == 0`` (normalization
+    ///     requires valid dimensions).
+    ///
+    /// Examples
+    /// --------
+    /// >>> coco = COCO("instances_val2017.json")
+    /// >>> stats = coco.to_yolo("labels/val2017/")
+    /// >>> print(stats)
+    /// {'images': 5000, 'annotations': 36781, 'skipped_crowd': 12, 'missing_bbox': 0}
+    fn to_yolo(&self, py: Python<'_>, output_dir: &str) -> PyResult<PyObject> {
+        hotcoco_core::convert::coco_to_yolo(&self.inner.dataset, Path::new(output_dir))
+            .map(|stats| {
+                let dict = PyDict::new(py);
+                dict.set_item("images", stats.images).unwrap();
+                dict.set_item("annotations", stats.annotations).unwrap();
+                dict.set_item("skipped_crowd", stats.skipped_crowd).unwrap();
+                dict.set_item("missing_bbox", stats.missing_bbox).unwrap();
+                dict.into_any().unbind()
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
+    /// Load a YOLO label directory as a COCO dataset.
+    ///
+    /// Reads ``data.yaml`` from ``yolo_dir`` for the category list, then parses
+    /// every ``.txt`` label file in the directory. Returns a ``COCO`` object with
+    /// sequential image and annotation IDs starting at 1.
+    ///
+    /// Parameters
+    /// ----------
+    /// yolo_dir : str
+    ///     Directory containing ``.txt`` label files and ``data.yaml``.
+    /// images_dir : str, optional
+    ///     Directory of source images. When provided, Pillow reads each image to
+    ///     populate ``width`` and ``height`` on the resulting image records.
+    ///     Without this, images are stored with ``width=0, height=0``.
+    ///     Requires ``pip install Pillow``.
+    ///
+    /// Returns
+    /// -------
+    /// COCO
+    ///     A new ``COCO`` object containing the parsed dataset.
+    ///
+    /// Raises
+    /// ------
+    /// ImportError
+    ///     If ``images_dir`` is provided but Pillow is not installed.
+    /// RuntimeError
+    ///     If ``data.yaml`` is missing or a label file cannot be parsed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> # Without image dims (width/height will be 0)
+    /// >>> coco = COCO.from_yolo("labels/val2017/")
+    ///
+    /// >>> # With image dims read via Pillow
+    /// >>> coco = COCO.from_yolo("labels/val2017/", images_dir="images/val2017/")
+    /// >>> coco.save("reconstructed.json")
+    #[classmethod]
+    #[pyo3(signature = (yolo_dir, images_dir=None))]
+    fn from_yolo(
+        _cls: &Bound<'_, PyType>,
+        yolo_dir: &str,
+        images_dir: Option<&str>,
+    ) -> PyResult<PyCOCO> {
+        use std::collections::HashMap;
+
+        let py = _cls.py();
+        let mut image_dims: HashMap<String, (u32, u32)> = HashMap::new();
+
+        if let Some(dir) = images_dir {
+            let pil_image = py.import("PIL.Image").map_err(|_| {
+                pyo3::exceptions::PyImportError::new_err(
+                    "Pillow is required to read image dimensions. \
+                     Install it with: pip install Pillow",
+                )
+            })?;
+
+            let read_dir = std::fs::read_dir(dir).map_err(|e| {
+                pyo3::exceptions::PyIOError::new_err(format!("cannot read images_dir: {e}"))
+            })?;
+
+            let img_exts = ["jpg", "jpeg", "png", "bmp", "tif", "tiff"];
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+                let ext_lower = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_lowercase());
+                if let Some(ext) = ext_lower {
+                    if img_exts.contains(&ext.as_str()) {
+                        let path_str = path.to_string_lossy().into_owned();
+                        let pil_img = pil_image.getattr("open")?.call1((path_str.as_str(),))?;
+                        let size: (u32, u32) = pil_img.getattr("size")?.extract()?;
+                        let _ = pil_img.call_method0("close");
+                        let stem = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                            .to_string();
+                        image_dims.insert(stem, size);
+                    }
+                }
+            }
+        }
+
+        hotcoco_core::convert::yolo_to_coco(Path::new(yolo_dir), &image_dims)
+            .map(|ds| PyCOCO {
+                inner: hotcoco_core::COCO::from_dataset(ds),
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    }
+
     #[getter]
     fn dataset(&self, py: Python<'_>) -> PyResult<PyObject> {
         let ds = &self.inner.dataset;

@@ -84,7 +84,11 @@ Publish benchmark results for Objects365-scale evaluation once runs on more capa
 
 ### Format Conversion
 
-COCO ↔ YOLO first (most requested), then COCO ↔ Pascal VOC and COCO ↔ CVAT. Everyone has a slightly broken converter script — a correct, well-tested one has real value. Scope tightly to YOLO before expanding.
+**Shipped (COCO ↔ YOLO).**
+
+~~COCO ↔ YOLO first (most requested). Everyone has a slightly broken converter script — a correct, well-tested one has real value.~~
+
+Pascal VOC and CVAT remain as a future Tier 3 item when there is demand.
 
 ### TIDE Error Analysis
 
