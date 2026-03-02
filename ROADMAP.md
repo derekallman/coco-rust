@@ -52,13 +52,11 @@ All implemented in Rust core, exposed via Python CLI and Python API.
 - ~~Python smoke test (`maturin develop` + inline import/eval check)~~
 - ~~Automated release publishing to crates.io and PyPI~~
 
----
+### Objects365
 
-## Tier 1 — Next
+**Shipped.**
 
-### Objects365 Verification
-
-Standard COCO evaluation protocol over 365 categories and ~2M images. Likely works today since the format is standard COCO — needs verification on a real O365 annotation file and explicit documentation. The main story is scale: at O365 size, hotcoco's speed advantage is most dramatic.
+~~Standard COCO evaluation protocol over 365 categories and ~2M images.~~ Verified working on real O365 annotation data. Published benchmark numbers coming soon — pending runs on more capable hardware.
 
 ### LVIS
 
@@ -71,6 +69,14 @@ Standard COCO evaluation protocol over 365 categories and ~2M images. Likely wor
 **Shipped.**
 
 ~~Per-category confusion matrix generation to identify systematic misclassifications. Self-contained, high value for practitioners debugging model failures, and the natural starting point for the visualization story.~~
+
+---
+
+## Tier 1 — Next
+
+### O365 Benchmark Numbers
+
+Publish benchmark results for Objects365-scale evaluation once runs on more capable hardware are complete.
 
 ---
 
