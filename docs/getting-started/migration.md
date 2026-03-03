@@ -56,6 +56,8 @@ Both camelCase and snake_case names are supported:
 
 The same applies to `Params` properties: `maxDets` / `max_dets`, `catIds` / `cat_ids`, `imgIds` / `img_ids`, `iouThrs` / `iou_thrs`, `recThrs` / `rec_thrs`, `areaRng` / `area_rng`, `areaRngLbl` / `area_rng_lbl`, `useCats` / `use_cats`, `kptOksSigmas` / `kpt_oks_sigmas`.
 
+And `mask` functions: `toBbox` / `to_bbox`, `frPoly` / `fr_poly`, `frBbox` / `fr_bbox`, `frPyObjects` / `fr_py_objects`.
+
 ## Return types
 
 hotcoco returns plain Python dicts and lists, matching pycocotools:

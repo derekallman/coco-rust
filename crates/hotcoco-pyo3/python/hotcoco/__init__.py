@@ -36,3 +36,6 @@ class LVISResults:
 
     def __new__(cls, lvis_gt, results, max_dets=300):  # noqa: ARG003
         return lvis_gt.load_res(results)
+
+
+from .integrations import CocoDetection, CocoEvaluator  # noqa: E402, F401

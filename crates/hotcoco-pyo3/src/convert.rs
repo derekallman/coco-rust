@@ -1,6 +1,6 @@
 use hotcoco_core::{Annotation, Category, DatasetStats, Image, Rle, Segmentation};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyBytes, PyDict, PyList};
 
 pub fn annotation_to_py(py: Python<'_>, ann: &Annotation) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
@@ -228,17 +228,41 @@ pub fn rle_to_py(py: Python<'_>, rle: &Rle) -> PyResult<PyObject> {
     Ok(dict.into_any().unbind())
 }
 
+/// Return an RLE in pycocotools format: `{"size": [h, w], "counts": b"..."}`.
+///
+/// The `counts` value is a `bytes` object containing the LEB128-compressed
+/// string, matching what `pycocotools.mask.encode` returns.
+pub fn rle_to_coco_py(py: Python<'_>, rle: &Rle) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+    dict.set_item("size", vec![rle.h, rle.w])?;
+    let compressed = hotcoco_core::mask::rle_to_string(rle);
+    let py_bytes = PyBytes::new(py, compressed.as_bytes());
+    dict.set_item("counts", py_bytes)?;
+    Ok(dict.into_any().unbind())
+}
+
 pub fn py_to_rle(dict: &Bound<'_, PyDict>) -> PyResult<Rle> {
-    // Support both {"h", "w", "counts": [ints]} and {"size": [h,w], "counts": "string"}
+    // Support {"h", "w", "counts": [ints]}, {"size": [h,w], "counts": "string"},
+    // and {"size": [h,w], "counts": b"bytes"} (pycocotools format)
     if let Some(size_obj) = dict.get_item("size")? {
         let size: [u32; 2] = size_obj.extract()?;
         let counts_obj = dict.get_item("counts")?.ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("RLE dict has 'size' but missing 'counts'")
         })?;
+        // Try str first
         if let Ok(s) = counts_obj.extract::<String>() {
             return hotcoco_core::mask::rle_from_string(&s, size[0], size[1])
                 .map_err(pyo3::exceptions::PyValueError::new_err);
         }
+        // Try bytes (pycocotools format)
+        if let Ok(b) = counts_obj.downcast::<PyBytes>() {
+            let s = std::str::from_utf8(b.as_bytes()).map_err(|e| {
+                pyo3::exceptions::PyValueError::new_err(format!("invalid UTF-8 in RLE counts: {e}"))
+            })?;
+            return hotcoco_core::mask::rle_from_string(s, size[0], size[1])
+                .map_err(pyo3::exceptions::PyValueError::new_err);
+        }
+        // Try list of ints (uncompressed RLE)
         let counts: Vec<u32> = counts_obj.extract()?;
         return Ok(Rle {
             h: size[0],

@@ -577,6 +577,33 @@ impl PyCOCO {
 
         Ok(dict.into_any().unbind())
     }
+
+    #[getter]
+    fn imgs(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+        for img in &self.inner.dataset.images {
+            dict.set_item(img.id, image_to_py(py, img)?)?;
+        }
+        Ok(dict.into_any().unbind())
+    }
+
+    #[getter]
+    fn anns(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+        for ann in &self.inner.dataset.annotations {
+            dict.set_item(ann.id, annotation_to_py(py, ann)?)?;
+        }
+        Ok(dict.into_any().unbind())
+    }
+
+    #[getter]
+    fn cats(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+        for cat in &self.inner.dataset.categories {
+            dict.set_item(cat.id, category_to_py(py, cat)?)?;
+        }
+        Ok(dict.into_any().unbind())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1170,13 +1197,18 @@ fn hotcoco(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     mask_mod.add_function(wrap_pyfunction!(mask::decode, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::area, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::to_bbox, &mask_mod)?)?;
+    mask_mod.add_function(wrap_pyfunction!(mask::to_bbox_camel, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::merge, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::iou, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::bbox_iou, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::fr_poly, &mask_mod)?)?;
+    mask_mod.add_function(wrap_pyfunction!(mask::fr_poly_camel, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::fr_bbox, &mask_mod)?)?;
+    mask_mod.add_function(wrap_pyfunction!(mask::fr_bbox_camel, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::rle_to_string, &mask_mod)?)?;
     mask_mod.add_function(wrap_pyfunction!(mask::rle_from_string, &mask_mod)?)?;
+    mask_mod.add_function(wrap_pyfunction!(mask::fr_py_objects, &mask_mod)?)?;
+    mask_mod.add_function(wrap_pyfunction!(mask::fr_py_objects_snake, &mask_mod)?)?;
     m.add_submodule(&mask_mod)?;
 
     Ok(())

@@ -96,13 +96,19 @@ Pascal VOC and CVAT remain as a future Tier 3 item when there is demand.
 
 ~~Error decomposition following [TIDE](https://github.com/dbolya/tide) — classification, localization, duplicate, background, and missed errors. Builds naturally on confusion matrices and is a meaningful differentiator from faster-coco-eval.~~
 
-### Streaming Evaluation
+### PyTorch Ecosystem Integrations
 
-Evaluate datasets that don't fit in memory. Process annotations in chunks without loading the full ground truth and detection sets upfront. Needed at O365/LVIS scale in production but not blocking anyone today — slot in once real users hit memory limits.
+**Shipped.**
+
+~~Drop-in ``CocoEvaluator`` and ``CocoDetection`` classes for PyTorch training loops. No torchvision or pycocotools dependency required. ``CocoEvaluator`` supports distributed multi-GPU evaluation with ``synchronize_between_processes()``. ``CocoDetection`` is a lightweight COCO dataset class compatible with ``DataLoader``.~~
 
 ---
 
 ## Tier 3 — Later
+
+### Streaming Evaluation
+
+Evaluate datasets that don't fit in memory. Process annotations in chunks without loading the full ground truth and detection sets upfront. Needed at O365/LVIS scale in production but not blocking anyone today — slot in once real users hit memory limits.
 
 ### CrowdPose
 
@@ -122,25 +128,9 @@ Custom evaluation backend for [FiftyOne](https://github.com/voxel51/fiftyone) (V
 
 Longer term, full multi-object tracking metrics — MOTA, HOTA, IDF1 — are worth exploring as a Phase 2 effort. TrackEval (the de-facto standard) is effectively unmaintained and slow; there's a real opening for a fast Rust alternative. This would be a meaningful scope expansion and is not planned for the near term, but the direction is intentional.
 
-### PyTorch Ecosystem Integrations
+### torchmetrics Backend
 
-Three drop-in utilities for PyTorch / torchvision training loops:
-
-- **`CocoEvaluator`** — distributed multi-GPU evaluator wrapping `COCOeval`. Follows the
-  torchvision reference pattern: `update()` → `synchronize_between_processes()` →
-  `accumulate()` → `summarize()`. Accepts `{image_id: {"boxes": Tensor, "scores": Tensor,
-  "labels": Tensor}}` dicts. Replaces the equivalent class in torchvision's detection
-  reference scripts with a faster backend.
-
-- **`CocoDetection`** — `torchvision.datasets.CocoDetection` subclass that uses hotcoco
-  instead of pycocotools. Near-trivial to implement via `init_as_pycocotools()`; the main
-  value is discoverability — users who `grep` for CocoDetection replacements find it.
-
-- **torchmetrics backend** — `MeanAveragePrecision(backend="hotcoco")` via a setuptools
-  entry point that torchmetrics discovers at runtime. One-word change in training code;
-  no other modifications needed.
-
-All three are low-effort to implement; the primary value is discoverability and documentation.
+`MeanAveragePrecision(backend="hotcoco")` via a setuptools entry point that torchmetrics discovers at runtime. One-word change in training code; no other modifications needed.
 
 ### Experiment Tracking Integrations
 

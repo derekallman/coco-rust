@@ -36,6 +36,10 @@ dev = [
     "faster-coco-eval",
     "pytest",
 ]
+torch = [
+    "torch>=1.9",
+    "Pillow>=8.0",
+]
 
 [project.urls]
 Homepage = "https://derekallman.github.io/hotcoco/"

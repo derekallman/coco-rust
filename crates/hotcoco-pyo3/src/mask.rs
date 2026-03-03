@@ -1,9 +1,9 @@
 use hotcoco_core::mask as rmask;
-use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArrayMethods, PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 
-use crate::convert::{py_to_rle, rle_to_py};
+use crate::convert::{py_to_rle, rle_to_coco_py};
 
 /// Transpose between row-major (numpy) and column-major (hotcoco) mask layouts.
 ///
@@ -20,84 +20,311 @@ pub(crate) fn transpose_mask(src: &[u8], h: usize, w: usize) -> Vec<u8> {
     dst
 }
 
-#[pyfunction]
-#[pyo3(signature = (mask, h, w))]
-pub fn encode(py: Python<'_>, mask: PyReadonlyArray2<u8>, h: u32, w: u32) -> PyResult<PyObject> {
-    let shape = mask.shape();
-    if shape[0] != h as usize || shape[1] != w as usize {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "mask shape must match (h, w)",
-        ));
+/// Extract a single RLE dict from a Python object (dict with "size"+"counts"
+/// or "h"+"w"+"counts").
+fn extract_coco_rle(obj: &Bound<'_, PyAny>) -> PyResult<hotcoco_core::Rle> {
+    let dict = obj.downcast::<PyDict>()?;
+    py_to_rle(dict)
+}
+
+/// Extract a list of RLE dicts from a Python object. Accepts either a single
+/// dict or a list of dicts.
+fn extract_rle_list(obj: &Bound<'_, PyAny>) -> PyResult<Vec<hotcoco_core::Rle>> {
+    if let Ok(dict) = obj.downcast::<PyDict>() {
+        Ok(vec![py_to_rle(dict)?])
+    } else {
+        let list: Vec<Bound<'_, PyAny>> = obj.extract()?;
+        list.iter().map(|item| extract_coco_rle(item)).collect()
     }
-    let mask_slice = mask.as_slice()?;
-    let col_major = transpose_mask(mask_slice, h as usize, w as usize);
-    let rle = rmask::encode(&col_major, h, w);
-    rle_to_py(py, &rle)
 }
 
+// ---------------------------------------------------------------------------
+// encode
+// ---------------------------------------------------------------------------
+
+/// Encode a binary mask to RLE in pycocotools format.
+///
+/// Parameters
+/// ----------
+/// mask : numpy.ndarray
+///     2-D ``(H, W)`` → returns a single RLE dict.
+///     3-D ``(H, W, N)`` → returns a list of *N* RLE dicts.
+///     Accepts both Fortran-order (pycocotools convention) and C-order arrays.
+///
+/// Returns
+/// -------
+/// dict or list[dict]
+///     ``{"size": [H, W], "counts": b"..."}`` matching pycocotools.
 #[pyfunction]
-pub fn decode(py: Python<'_>, rle: &Bound<'_, PyDict>) -> PyResult<Py<PyArray2<u8>>> {
-    let rle = py_to_rle(rle)?;
-    let col_major = rmask::decode(&rle);
-    let h = rle.h as usize;
-    let w = rle.w as usize;
-    let row_major = transpose_mask(&col_major, h, w);
-    let flat = PyArray1::from_vec(py, row_major);
-    let arr = flat.reshape([h, w])?;
-    Ok(arr.unbind())
+pub fn encode(py: Python<'_>, mask: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let ndim: usize = mask.getattr("ndim")?.extract()?;
+    match ndim {
+        2 => encode_2d(py, mask),
+        3 => encode_3d(py, mask),
+        _ => Err(pyo3::exceptions::PyValueError::new_err(
+            "mask must be 2-D (H, W) or 3-D (H, W, N)",
+        )),
+    }
 }
 
-#[pyfunction]
-pub fn area(rle: &Bound<'_, PyDict>) -> PyResult<u64> {
-    let rle = py_to_rle(rle)?;
-    Ok(rmask::area(&rle))
+fn encode_2d(py: Python<'_>, mask: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let arr: PyReadonlyArray2<u8> = mask.extract()?;
+    let shape = arr.shape();
+    let h = shape[0];
+    let w = shape[1];
+
+    // Check if Fortran-order (column-major)
+    let is_fortran: bool = mask.getattr("flags")?.getattr("f_contiguous")?.extract()?;
+
+    let col_major = if is_fortran {
+        // Already column-major — use raw data directly
+        arr.as_slice()?.to_vec()
+    } else {
+        // C-order — transpose to column-major
+        let slice = arr.as_slice()?;
+        transpose_mask(slice, h, w)
+    };
+
+    let rle = rmask::encode(&col_major, h as u32, w as u32);
+    rle_to_coco_py(py, &rle)
 }
 
-#[pyfunction]
-pub fn to_bbox(rle: &Bound<'_, PyDict>) -> PyResult<Vec<f64>> {
-    let rle = py_to_rle(rle)?;
-    Ok(rmask::to_bbox(&rle).to_vec())
+fn encode_3d(py: Python<'_>, mask: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    let arr: PyReadonlyArray3<u8> = mask.extract()?;
+    let shape = arr.shape();
+    let h = shape[0];
+    let w = shape[1];
+    let n = shape[2];
+
+    let raw = arr.as_array();
+    let list = PyList::empty(py);
+    for i in 0..n {
+        // Build column-major data: iterate column-by-column (x then y)
+        let slice_2d = raw.index_axis(numpy::ndarray::Axis(2), i);
+        let mut col_major = Vec::with_capacity(h * w);
+        for x in 0..w {
+            for y in 0..h {
+                col_major.push(slice_2d[[y, x]]);
+            }
+        }
+        let rle = rmask::encode(&col_major, h as u32, w as u32);
+        list.append(rle_to_coco_py(py, &rle)?)?;
+    }
+    Ok(list.into_any().unbind())
 }
+
+// ---------------------------------------------------------------------------
+// decode
+// ---------------------------------------------------------------------------
+
+/// Decode RLE to a binary mask.
+///
+/// Parameters
+/// ----------
+/// rle : dict or list[dict]
+///     Single RLE dict → ``(H, W)`` uint8 Fortran-order array.
+///     List of *N* RLE dicts → ``(H, W, N)`` uint8 Fortran-order array.
+///
+/// Returns
+/// -------
+/// numpy.ndarray
+#[pyfunction]
+pub fn decode(py: Python<'_>, rle: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    if let Ok(dict) = rle.downcast::<PyDict>() {
+        // Single RLE → (H, W) Fortran-order
+        let r = py_to_rle(dict)?;
+        let col_major = rmask::decode(&r);
+        let h = r.h as usize;
+        let w = r.w as usize;
+        // col_major is already in Fortran order — create array and set flag
+        let flat = PyArray1::from_vec(py, col_major);
+        let arr2d = flat.reshape_with_order([h, w], numpy::npyffi::NPY_ORDER::NPY_FORTRANORDER)?;
+        Ok(arr2d.into_any().unbind())
+    } else {
+        // List of RLEs → (H, W, N) Fortran-order
+        let list: Vec<Bound<'_, PyAny>> = rle.extract()?;
+        if list.is_empty() {
+            return Err(pyo3::exceptions::PyValueError::new_err("empty RLE list"));
+        }
+        let rles: Vec<hotcoco_core::Rle> = list
+            .iter()
+            .map(|item| extract_coco_rle(item))
+            .collect::<PyResult<_>>()?;
+
+        let h = rles[0].h as usize;
+        let w = rles[0].w as usize;
+        let n = rles.len();
+
+        // Build (H, W, N) Fortran-order: for each slice, decode gives
+        // column-major data. In Fortran order for 3D, axis 0 varies fastest,
+        // so memory layout is: all (h*w) of slice 0, then slice 1, etc.
+        let mut data = Vec::with_capacity(h * w * n);
+        for r in &rles {
+            data.extend_from_slice(&rmask::decode(r));
+        }
+        let flat = PyArray1::from_vec(py, data);
+        let arr3d =
+            flat.reshape_with_order([h, w, n], numpy::npyffi::NPY_ORDER::NPY_FORTRANORDER)?;
+        Ok(arr3d.into_any().unbind())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// area
+// ---------------------------------------------------------------------------
+
+/// Compute the area (number of foreground pixels) of RLE mask(s).
+///
+/// Parameters
+/// ----------
+/// rle : dict or list[dict]
+///     Single RLE dict → scalar uint32.
+///     List of RLE dicts → numpy uint32 array.
+#[pyfunction]
+pub fn area(py: Python<'_>, rle: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    if let Ok(dict) = rle.downcast::<PyDict>() {
+        let r = py_to_rle(dict)?;
+        let a = rmask::area(&r) as u32;
+        Ok(a.into_pyobject(py)?.into_any().unbind())
+    } else {
+        let rles = extract_rle_list(rle)?;
+        let areas: Vec<u32> = rles.iter().map(|r| rmask::area(r) as u32).collect();
+        let arr = PyArray1::from_vec(py, areas);
+        Ok(arr.into_any().unbind())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// to_bbox / toBbox
+// ---------------------------------------------------------------------------
+
+/// Compute bounding box(es) from RLE mask(s).
+///
+/// Parameters
+/// ----------
+/// rle : dict or list[dict]
+///     Single RLE dict → numpy float64(4,).
+///     List of RLE dicts → numpy float64(N, 4).
+#[pyfunction]
+pub fn to_bbox(py: Python<'_>, rle: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    if let Ok(dict) = rle.downcast::<PyDict>() {
+        let r = py_to_rle(dict)?;
+        let bb = rmask::to_bbox(&r);
+        let arr = PyArray1::from_vec(py, bb.to_vec());
+        Ok(arr.into_any().unbind())
+    } else {
+        let rles = extract_rle_list(rle)?;
+        let n = rles.len();
+        let mut data = Vec::with_capacity(n * 4);
+        for r in &rles {
+            data.extend_from_slice(&rmask::to_bbox(r));
+        }
+        let flat = PyArray1::from_vec(py, data);
+        let arr2d = flat.reshape([n, 4])?;
+        Ok(arr2d.into_any().unbind())
+    }
+}
+
+/// Alias for `to_bbox` matching pycocotools naming.
+#[pyfunction]
+#[pyo3(name = "toBbox")]
+pub fn to_bbox_camel(py: Python<'_>, rle: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    to_bbox(py, rle)
+}
+
+// ---------------------------------------------------------------------------
+// merge
+// ---------------------------------------------------------------------------
 
 #[pyfunction]
 #[pyo3(signature = (rles, intersect = false))]
-pub fn merge(py: Python<'_>, rles: Vec<Bound<'_, PyDict>>, intersect: bool) -> PyResult<PyObject> {
-    let rles: Vec<hotcoco_core::Rle> = rles.iter().map(py_to_rle).collect::<PyResult<_>>()?;
-    let result = rmask::merge(&rles, intersect);
-    rle_to_py(py, &result)
+pub fn merge(py: Python<'_>, rles: &Bound<'_, PyAny>, intersect: bool) -> PyResult<PyObject> {
+    let rle_vec = extract_rle_list(rles)?;
+    let result = rmask::merge(&rle_vec, intersect);
+    rle_to_coco_py(py, &result)
 }
+
+// ---------------------------------------------------------------------------
+// iou
+// ---------------------------------------------------------------------------
 
 #[pyfunction]
 pub fn iou(
-    dt: Vec<Bound<'_, PyDict>>,
-    gt: Vec<Bound<'_, PyDict>>,
+    py: Python<'_>,
+    dt: &Bound<'_, PyAny>,
+    gt: &Bound<'_, PyAny>,
     iscrowd: Vec<bool>,
-) -> PyResult<Vec<Vec<f64>>> {
-    let dt_rles: Vec<hotcoco_core::Rle> = dt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
-    let gt_rles: Vec<hotcoco_core::Rle> = gt.iter().map(py_to_rle).collect::<PyResult<_>>()?;
-    Ok(rmask::iou(&dt_rles, &gt_rles, &iscrowd))
+) -> PyResult<PyObject> {
+    let dt_rles = extract_rle_list(dt)?;
+    let gt_rles = extract_rle_list(gt)?;
+    let result = rmask::iou(&dt_rles, &gt_rles, &iscrowd);
+    let d = dt_rles.len();
+    let g = gt_rles.len();
+    let mut flat = Vec::with_capacity(d * g);
+    for row in &result {
+        flat.extend_from_slice(row);
+    }
+    let arr = PyArray1::from_vec(py, flat);
+    let arr2d = arr.reshape([d, g])?;
+    Ok(arr2d.into_any().unbind())
 }
 
 #[pyfunction]
 pub fn bbox_iou(
+    py: Python<'_>,
     dt: Vec<[f64; 4]>,
     gt: Vec<[f64; 4]>,
     iscrowd: Vec<bool>,
-) -> PyResult<Vec<Vec<f64>>> {
-    Ok(rmask::bbox_iou(&dt, &gt, &iscrowd))
+) -> PyResult<PyObject> {
+    let result = rmask::bbox_iou(&dt, &gt, &iscrowd);
+    let d = dt.len();
+    let g = gt.len();
+    let mut flat = Vec::with_capacity(d * g);
+    for row in &result {
+        flat.extend_from_slice(row);
+    }
+    let arr = PyArray1::from_vec(py, flat);
+    let arr2d = arr.reshape([d, g])?;
+    Ok(arr2d.into_any().unbind())
 }
+
+// ---------------------------------------------------------------------------
+// fr_poly / frPoly
+// ---------------------------------------------------------------------------
 
 #[pyfunction]
 pub fn fr_poly(py: Python<'_>, xy: Vec<f64>, h: u32, w: u32) -> PyResult<PyObject> {
     let rle = rmask::fr_poly(&xy, h, w);
-    rle_to_py(py, &rle)
+    rle_to_coco_py(py, &rle)
 }
+
+/// Alias for `fr_poly` matching pycocotools naming.
+#[pyfunction]
+#[pyo3(name = "frPoly")]
+pub fn fr_poly_camel(py: Python<'_>, xy: Vec<f64>, h: u32, w: u32) -> PyResult<PyObject> {
+    fr_poly(py, xy, h, w)
+}
+
+// ---------------------------------------------------------------------------
+// fr_bbox / frBbox
+// ---------------------------------------------------------------------------
 
 #[pyfunction]
 pub fn fr_bbox(py: Python<'_>, bb: [f64; 4], h: u32, w: u32) -> PyResult<PyObject> {
     let rle = rmask::fr_bbox(&bb, h, w);
-    rle_to_py(py, &rle)
+    rle_to_coco_py(py, &rle)
 }
+
+/// Alias for `fr_bbox` matching pycocotools naming.
+#[pyfunction]
+#[pyo3(name = "frBbox")]
+pub fn fr_bbox_camel(py: Python<'_>, bb: [f64; 4], h: u32, w: u32) -> PyResult<PyObject> {
+    fr_bbox(py, bb, h, w)
+}
+
+// ---------------------------------------------------------------------------
+// rle_to_string / rle_from_string
+// ---------------------------------------------------------------------------
 
 #[pyfunction]
 pub fn rle_to_string(rle: &Bound<'_, PyDict>) -> PyResult<String> {
@@ -108,5 +335,74 @@ pub fn rle_to_string(rle: &Bound<'_, PyDict>) -> PyResult<String> {
 #[pyfunction]
 pub fn rle_from_string(py: Python<'_>, s: &str, h: u32, w: u32) -> PyResult<PyObject> {
     let rle = rmask::rle_from_string(s, h, w).map_err(pyo3::exceptions::PyValueError::new_err)?;
-    rle_to_py(py, &rle)
+    rle_to_coco_py(py, &rle)
+}
+
+// ---------------------------------------------------------------------------
+// frPyObjects / fr_py_objects
+// ---------------------------------------------------------------------------
+
+/// Encode segmentation objects to RLEs (pycocotools compatibility).
+///
+/// Parameters
+/// ----------
+/// seg : list[list[float]] | dict | list[dict]
+///     - List of polygon coordinate lists → list of RLE dicts.
+///     - Single uncompressed RLE dict → list of 1 RLE dict.
+///     - List of uncompressed RLE dicts → list of RLE dicts.
+/// h : int
+///     Image height.
+/// w : int
+///     Image width.
+///
+/// Returns
+/// -------
+/// list[dict]
+///     List of RLE dicts in pycocotools format.
+#[pyfunction]
+#[pyo3(name = "frPyObjects")]
+pub fn fr_py_objects(py: Python<'_>, seg: &Bound<'_, PyAny>, h: u32, w: u32) -> PyResult<PyObject> {
+    // Case 1: single dict (uncompressed or compressed RLE) → single dict
+    if let Ok(dict) = seg.downcast::<PyDict>() {
+        let rle = py_to_rle(dict)?;
+        return rle_to_coco_py(py, &rle);
+    }
+
+    // Case 2: list — could be list of polygons or list of dicts
+    let items: Vec<Bound<'_, PyAny>> = seg.extract()?;
+    if items.is_empty() {
+        return Ok(PyList::empty(py).into_any().unbind());
+    }
+
+    // Check first element to determine type
+    let first = &items[0];
+    if first.downcast::<PyDict>().is_ok() {
+        // List of RLE dicts
+        let list = PyList::empty(py);
+        for item in &items {
+            let rle = extract_coco_rle(item)?;
+            list.append(rle_to_coco_py(py, &rle)?)?;
+        }
+        Ok(list.into_any().unbind())
+    } else {
+        // List of polygon coordinate lists
+        let list = PyList::empty(py);
+        for item in &items {
+            let coords: Vec<f64> = item.extract()?;
+            let rle = rmask::fr_poly(&coords, h, w);
+            list.append(rle_to_coco_py(py, &rle)?)?;
+        }
+        Ok(list.into_any().unbind())
+    }
+}
+
+/// Snake-case alias for `frPyObjects`.
+#[pyfunction]
+pub fn fr_py_objects_snake(
+    py: Python<'_>,
+    seg: &Bound<'_, PyAny>,
+    h: u32,
+    w: u32,
+) -> PyResult<PyObject> {
+    fr_py_objects(py, seg, h, w)
 }

@@ -16,6 +16,12 @@ Low-level mask operations on Run-Length Encoded (RLE) binary masks.
 
 For background on RLE and usage patterns, see the [Mask Operations](../guide/masks.md) guide.
 
+!!! tip "pycocotools drop-in"
+    The Python `mask` module is a drop-in replacement for `pycocotools.mask`.
+    All functions accept and return the same types — `encode` returns
+    `{"size": [h, w], "counts": b"..."}`, `decode` returns Fortran-order arrays,
+    and batch functions accept single values or lists.
+
 ---
 
 ## Functions
@@ -27,24 +33,39 @@ Encode a binary mask to RLE.
 === "Python"
 
     ```python
-    encode(mask: numpy.ndarray, h: int, w: int) -> dict
+    encode(mask: numpy.ndarray) -> dict | list[dict]
     ```
 
     | Parameter | Type | Description |
     |-----------|------|-------------|
-    | `mask` | `numpy.ndarray` | Binary mask, shape (h, w), dtype `uint8` |
-    | `h` | `int` | Height |
-    | `w` | `int` | Width |
+    | `mask` | `numpy.ndarray` | 2-D `(H, W)` or 3-D `(H, W, N)`, dtype `uint8` |
 
-    **Returns:** `dict` — RLE dict with `"counts"` (str) and `"size"` ([h, w]).
+    **Returns:**
+
+    - 2-D input → `dict` with `"size"` (`[H, W]`) and `"counts"` (`bytes`)
+    - 3-D input → `list[dict]` of *N* RLE dicts
+
+    Accepts both Fortran-order (pycocotools convention) and C-order arrays.
 
     ```python
     import numpy as np
     from hotcoco import mask
 
-    m = np.zeros((100, 100), dtype=np.uint8)
+    # Single mask (Fortran-order, matching pycocotools)
+    m = np.zeros((100, 100), dtype=np.uint8, order="F")
     m[10:50, 20:80] = 1
-    rle = mask.encode(m, 100, 100)
+    rle = mask.encode(m)
+    # {"size": [100, 100], "counts": b"..."}
+
+    # Batch of N masks
+    m3 = np.zeros((100, 100, 3), dtype=np.uint8, order="F")
+    m3[10:50, 20:80, 0] = 1
+    rles = mask.encode(m3)  # list of 3 RLE dicts
+
+    # C-order also works (auto-transposed internally)
+    m_c = np.zeros((100, 100), dtype=np.uint8)
+    m_c[10:50, 20:80] = 1
+    rle = mask.encode(m_c)
     ```
 
 === "Rust"
@@ -74,13 +95,17 @@ Decode an RLE to a binary mask.
 === "Python"
 
     ```python
-    decode(rle: dict) -> numpy.ndarray
+    decode(rle: dict | list[dict]) -> numpy.ndarray
     ```
 
-    **Returns:** `numpy.ndarray` — Binary mask, shape (h, w), dtype `uint8`.
+    | Input | Returns |
+    |-------|---------|
+    | Single dict | `(H, W)` uint8 Fortran-order array |
+    | List of *N* dicts | `(H, W, N)` uint8 Fortran-order array |
 
     ```python
-    m = mask.decode(rle)
+    m = mask.decode(rle)          # (H, W)
+    m3 = mask.decode([r1, r2])    # (H, W, 2)
     ```
 
 === "Rust"
@@ -99,16 +124,22 @@ Decode an RLE to a binary mask.
 
 ### `area`
 
-Compute the area (number of foreground pixels) of an RLE mask.
+Compute the area (number of foreground pixels) of RLE mask(s).
 
 === "Python"
 
     ```python
-    area(rle: dict) -> int
+    area(rle: dict | list[dict]) -> int | numpy.ndarray
     ```
 
+    | Input | Returns |
+    |-------|---------|
+    | Single dict | `int` (uint32) |
+    | List of dicts | `numpy.ndarray` of uint32 |
+
     ```python
-    a = mask.area(rle)
+    a = mask.area(rle)        # scalar
+    areas = mask.area(rles)   # array
     ```
 
 === "Rust"
@@ -125,18 +156,24 @@ Compute the area (number of foreground pixels) of an RLE mask.
 
 ### `to_bbox`
 
-Convert an RLE mask to a bounding box.
+Convert RLE mask(s) to bounding box(es).
 
 === "Python"
 
     ```python
-    to_bbox(rle: dict) -> list[float]
+    to_bbox(rle: dict | list[dict]) -> numpy.ndarray
     ```
 
-    **Returns:** `[x, y, width, height]`
+    | Input | Returns |
+    |-------|---------|
+    | Single dict | `numpy.ndarray` of shape `(4,)`, float64 |
+    | List of *N* dicts | `numpy.ndarray` of shape `(N, 4)`, float64 |
+
+    Values are `[x, y, width, height]`.
 
     ```python
-    bbox = mask.to_bbox(rle)
+    bbox = mask.to_bbox(rle)      # shape (4,)
+    bboxes = mask.to_bbox(rles)   # shape (N, 4)
     ```
 
     !!! note "camelCase alias"
@@ -196,7 +233,7 @@ Compute pairwise IoU between two lists of RLE masks.
 === "Python"
 
     ```python
-    iou(dt: list[dict], gt: list[dict], iscrowd: list[bool]) -> list[list[float]]
+    iou(dt: list[dict], gt: list[dict], iscrowd: list[bool]) -> numpy.ndarray
     ```
 
     | Parameter | Type | Description |
@@ -205,7 +242,7 @@ Compute pairwise IoU between two lists of RLE masks.
     | `gt` | `list[dict]` | Ground truth RLE dicts |
     | `iscrowd` | `list[bool]` | Per-GT crowd flag |
 
-    **Returns:** 2D list of shape `(len(dt), len(gt))`.
+    **Returns:** `numpy.ndarray` of shape `(len(dt), len(gt))`, dtype float64.
 
     ```python
     ious = mask.iou(dt_rles, gt_rles, [False] * len(gt_rles))
@@ -234,10 +271,12 @@ Compute pairwise IoU between two lists of bounding boxes.
 === "Python"
 
     ```python
-    bbox_iou(dt: list[list[float]], gt: list[list[float]], iscrowd: list[bool]) -> list[list[float]]
+    bbox_iou(dt: list[list[float]], gt: list[list[float]], iscrowd: list[bool]) -> numpy.ndarray
     ```
 
     Bounding boxes are `[x, y, width, height]`.
+
+    **Returns:** `numpy.ndarray` of shape `(len(dt), len(gt))`, dtype float64.
 
     ```python
     ious = mask.bbox_iou(dt_boxes, gt_boxes, [False] * len(gt_boxes))
@@ -255,6 +294,37 @@ Compute pairwise IoU between two lists of bounding boxes.
     ```rust
     let ious = mask::bbox_iou(&dt_boxes, &gt_boxes, &vec![false; gt_boxes.len()]);
     ```
+
+---
+
+### `frPyObjects`
+
+Encode segmentation objects to RLEs. This is pycocotools' universal entry point for converting any segmentation format to compressed RLE.
+
+=== "Python"
+
+    ```python
+    frPyObjects(seg, h: int, w: int) -> dict | list[dict]
+    ```
+
+    | Parameter | Type | Description |
+    |-----------|------|-------------|
+    | `seg` | `list[list[float]]` | List of polygon coordinate lists → list of RLE dicts |
+    | | `dict` | Single uncompressed RLE dict → single RLE dict |
+    | | `list[dict]` | List of uncompressed RLE dicts → list of RLE dicts |
+    | `h` | `int` | Image height |
+    | `w` | `int` | Image width |
+
+    ```python
+    # Polygons
+    rles = mask.frPyObjects([[x1,y1,x2,y2,...]], 480, 640)
+
+    # Uncompressed RLE dict
+    rle = mask.frPyObjects({"size": [480, 640], "counts": [0, 5, 100, ...]}, 480, 640)
+    ```
+
+    !!! note "snake_case alias"
+        Also available as `fr_py_objects()`.
 
 ---
 
