@@ -1,9 +1,24 @@
 use hotcoco_core::mask as rmask;
-use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::convert::{py_to_rle, rle_to_py};
+
+/// Transpose between row-major (numpy) and column-major (hotcoco) mask layouts.
+///
+/// Row-major index `y * w + x` ↔ column-major index `y + h * x`.
+/// Works in both directions (the operation is its own inverse).
+pub(crate) fn transpose_mask(src: &[u8], h: usize, w: usize) -> Vec<u8> {
+    debug_assert_eq!(src.len(), h * w);
+    let mut dst = vec![0u8; h * w];
+    for y in 0..h {
+        for x in 0..w {
+            dst[y + h * x] = src[y * w + x];
+        }
+    }
+    dst
+}
 
 #[pyfunction]
 #[pyo3(signature = (mask, h, w))]
@@ -14,14 +29,8 @@ pub fn encode(py: Python<'_>, mask: PyReadonlyArray2<u8>, h: u32, w: u32) -> PyR
             "mask shape must match (h, w)",
         ));
     }
-    // Convert row-major numpy to column-major for hotcoco_core
-    let mut col_major = vec![0u8; (h as usize) * (w as usize)];
     let mask_slice = mask.as_slice()?;
-    for y in 0..h as usize {
-        for x in 0..w as usize {
-            col_major[y + h as usize * x] = mask_slice[y * w as usize + x];
-        }
-    }
+    let col_major = transpose_mask(mask_slice, h as usize, w as usize);
     let rle = rmask::encode(&col_major, h, w);
     rle_to_py(py, &rle)
 }
@@ -32,15 +41,9 @@ pub fn decode(py: Python<'_>, rle: &Bound<'_, PyDict>) -> PyResult<Py<PyArray2<u
     let col_major = rmask::decode(&rle);
     let h = rle.h as usize;
     let w = rle.w as usize;
-    let arr = unsafe { PyArray2::new(py, [h, w], false) };
-    unsafe {
-        let ptr: *mut u8 = arr.as_raw_array_mut().as_mut_ptr();
-        for y in 0..h {
-            for x in 0..w {
-                *ptr.add(y * w + x) = col_major[y + h * x];
-            }
-        }
-    }
+    let row_major = transpose_mask(&col_major, h, w);
+    let flat = PyArray1::from_vec(py, row_major);
+    let arr = flat.reshape([h, w])?;
     Ok(arr.unbind())
 }
 

@@ -4,6 +4,8 @@ use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple, PyType};
 
+use mask::transpose_mask;
+
 use hotcoco_core::Annotation;
 
 mod convert;
@@ -228,15 +230,9 @@ impl PyCOCO {
         let col_major = hotcoco_core::mask::decode(&rle);
         let h = rle.h as usize;
         let w = rle.w as usize;
-        let arr = unsafe { PyArray2::new(py, [h, w], false) };
-        unsafe {
-            let ptr: *mut u8 = arr.as_raw_array_mut().as_mut_ptr();
-            for y in 0..h {
-                for x in 0..w {
-                    *ptr.add(y * w + x) = col_major[y + h * x];
-                }
-            }
-        }
+        let row_major = transpose_mask(&col_major, h, w);
+        let flat = numpy::PyArray1::from_vec(py, row_major);
+        let arr = flat.reshape([h, w])?;
         Ok(arr.unbind())
     }
 
@@ -447,16 +443,14 @@ impl PyCOCO {
     /// >>> print(stats)
     /// {'images': 5000, 'annotations': 36781, 'skipped_crowd': 12, 'missing_bbox': 0}
     fn to_yolo(&self, py: Python<'_>, output_dir: &str) -> PyResult<PyObject> {
-        hotcoco_core::convert::coco_to_yolo(&self.inner.dataset, Path::new(output_dir))
-            .map(|stats| {
-                let dict = PyDict::new(py);
-                dict.set_item("images", stats.images).unwrap();
-                dict.set_item("annotations", stats.annotations).unwrap();
-                dict.set_item("skipped_crowd", stats.skipped_crowd).unwrap();
-                dict.set_item("missing_bbox", stats.missing_bbox).unwrap();
-                dict.into_any().unbind()
-            })
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+        let stats = hotcoco_core::convert::coco_to_yolo(&self.inner.dataset, Path::new(output_dir))
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let dict = PyDict::new(py);
+        dict.set_item("images", stats.images)?;
+        dict.set_item("annotations", stats.annotations)?;
+        dict.set_item("skipped_crowd", stats.skipped_crowd)?;
+        dict.set_item("missing_bbox", stats.missing_bbox)?;
+        Ok(dict.into_any().unbind())
     }
 
     /// Load a YOLO label directory as a COCO dataset.
@@ -625,181 +619,149 @@ impl PyParams {
     fn img_ids(&self) -> Vec<u64> {
         self.inner.img_ids.clone()
     }
-
     #[setter]
     fn set_img_ids(&mut self, val: Vec<u64>) {
         self.inner.img_ids = val;
     }
-
     #[getter]
     fn cat_ids(&self) -> Vec<u64> {
         self.inner.cat_ids.clone()
     }
-
     #[setter]
     fn set_cat_ids(&mut self, val: Vec<u64>) {
         self.inner.cat_ids = val;
     }
-
     #[getter]
     fn iou_thrs(&self) -> Vec<f64> {
         self.inner.iou_thrs.clone()
     }
-
     #[setter]
     fn set_iou_thrs(&mut self, val: Vec<f64>) {
         self.inner.iou_thrs = val;
     }
-
     #[getter]
     fn rec_thrs(&self) -> Vec<f64> {
         self.inner.rec_thrs.clone()
     }
-
     #[setter]
     fn set_rec_thrs(&mut self, val: Vec<f64>) {
         self.inner.rec_thrs = val;
     }
-
     #[getter]
     fn max_dets(&self) -> Vec<usize> {
         self.inner.max_dets.clone()
     }
-
     #[setter]
     fn set_max_dets(&mut self, val: Vec<usize>) {
         self.inner.max_dets = val;
     }
-
     #[getter]
     fn area_rng(&self) -> Vec<[f64; 2]> {
         self.inner.area_rng.clone()
     }
-
     #[setter]
     fn set_area_rng(&mut self, val: Vec<[f64; 2]>) {
         self.inner.area_rng = val;
     }
-
     #[getter]
     fn area_rng_lbl(&self) -> Vec<String> {
         self.inner.area_rng_lbl.clone()
     }
-
     #[setter]
     fn set_area_rng_lbl(&mut self, val: Vec<String>) {
         self.inner.area_rng_lbl = val;
     }
-
     #[getter]
     fn use_cats(&self) -> bool {
         self.inner.use_cats
     }
-
     #[setter]
     fn set_use_cats(&mut self, val: bool) {
         self.inner.use_cats = val;
     }
-
     #[getter]
     fn kpt_oks_sigmas(&self) -> Vec<f64> {
         self.inner.kpt_oks_sigmas.clone()
     }
-
     #[setter]
     fn set_kpt_oks_sigmas(&mut self, val: Vec<f64>) {
         self.inner.kpt_oks_sigmas = val;
     }
 
-    // camelCase aliases for pycocotools compatibility
+    // ---- camelCase aliases for pycocotools compatibility ----
+    // PyO3 doesn't support macros or multiple #[getter] attrs on one method,
+    // so each alias forwards manually.
     #[getter(iouType)]
     fn iou_type_camel(&self) -> &str {
         self.iou_type()
     }
-
     #[setter(iouType)]
     fn set_iou_type_camel(&mut self, val: &str) -> PyResult<()> {
         self.set_iou_type(val)
     }
-
     #[getter(imgIds)]
     fn img_ids_camel(&self) -> Vec<u64> {
         self.img_ids()
     }
-
     #[setter(imgIds)]
     fn set_img_ids_camel(&mut self, val: Vec<u64>) {
-        self.set_img_ids(val);
+        self.set_img_ids(val)
     }
-
     #[getter(catIds)]
     fn cat_ids_camel(&self) -> Vec<u64> {
         self.cat_ids()
     }
-
     #[setter(catIds)]
     fn set_cat_ids_camel(&mut self, val: Vec<u64>) {
-        self.set_cat_ids(val);
+        self.set_cat_ids(val)
     }
-
     #[getter(iouThrs)]
     fn iou_thrs_camel(&self) -> Vec<f64> {
         self.iou_thrs()
     }
-
     #[setter(iouThrs)]
     fn set_iou_thrs_camel(&mut self, val: Vec<f64>) {
-        self.set_iou_thrs(val);
+        self.set_iou_thrs(val)
     }
-
     #[getter(recThrs)]
     fn rec_thrs_camel(&self) -> Vec<f64> {
         self.rec_thrs()
     }
-
     #[setter(recThrs)]
     fn set_rec_thrs_camel(&mut self, val: Vec<f64>) {
-        self.set_rec_thrs(val);
+        self.set_rec_thrs(val)
     }
-
     #[getter(maxDets)]
     fn max_dets_camel(&self) -> Vec<usize> {
         self.max_dets()
     }
-
     #[setter(maxDets)]
     fn set_max_dets_camel(&mut self, val: Vec<usize>) {
-        self.set_max_dets(val);
+        self.set_max_dets(val)
     }
-
     #[getter(areaRng)]
     fn area_rng_camel(&self) -> Vec<[f64; 2]> {
         self.area_rng()
     }
-
     #[setter(areaRng)]
     fn set_area_rng_camel(&mut self, val: Vec<[f64; 2]>) {
-        self.set_area_rng(val);
+        self.set_area_rng(val)
     }
-
     #[getter(areaRngLbl)]
     fn area_rng_lbl_camel(&self) -> Vec<String> {
         self.area_rng_lbl()
     }
-
     #[setter(areaRngLbl)]
     fn set_area_rng_lbl_camel(&mut self, val: Vec<String>) {
-        self.set_area_rng_lbl(val);
+        self.set_area_rng_lbl(val)
     }
-
     #[getter(useCats)]
     fn use_cats_camel(&self) -> bool {
         self.use_cats()
     }
-
     #[setter(useCats)]
     fn set_use_cats_camel(&mut self, val: bool) {
-        self.set_use_cats(val);
+        self.set_use_cats(val)
     }
 }
 
@@ -848,10 +810,12 @@ impl PyCOCOeval {
     #[pyo3(signature = (coco_gt, coco_dt, iou_type, lvis_style=false))]
     fn new(coco_gt: &PyCOCO, coco_dt: &PyCOCO, iou_type: &str, lvis_style: bool) -> PyResult<Self> {
         let iou = parse_iou_type(iou_type)?;
+        let gt = hotcoco_core::COCO::from_dataset(coco_gt.inner.dataset.clone());
+        let dt = hotcoco_core::COCO::from_dataset(coco_dt.inner.dataset.clone());
         let inner = if lvis_style {
-            hotcoco_core::COCOeval::new_lvis(coco_gt.clone().inner, coco_dt.clone().inner, iou)
+            hotcoco_core::COCOeval::new_lvis(gt, dt, iou)
         } else {
-            hotcoco_core::COCOeval::new(coco_gt.clone().inner, coco_dt.clone().inner, iou)
+            hotcoco_core::COCOeval::new(gt, dt, iou)
         };
         Ok(PyCOCOeval { inner })
     }
@@ -1040,7 +1004,10 @@ Example\n\
 "]
     #[pyo3(signature = (pos_thr=0.5, bg_thr=0.1))]
     fn tide_errors(&self, py: Python<'_>, pos_thr: f64, bg_thr: f64) -> PyResult<PyObject> {
-        let te = self.inner.tide_errors(pos_thr, bg_thr);
+        let te = self
+            .inner
+            .tide_errors(pos_thr, bg_thr)
+            .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
         let delta_ap = PyDict::new(py);
         for (k, v) in &te.delta_ap {

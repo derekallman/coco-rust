@@ -8,6 +8,10 @@ use rayon::prelude::*;
 
 use crate::types::Rle;
 
+/// Minimum D×G product before IoU computation switches from sequential to parallel (rayon).
+/// Below this threshold, thread dispatch overhead exceeds the parallelism benefit.
+const MIN_PARALLEL_WORK: usize = 1024;
+
 /// Encode a column-major binary mask into RLE.
 ///
 /// `mask` is stored in column-major order (Fortran order): pixel (x, y) is at index `y + h * x`.
@@ -241,7 +245,7 @@ fn intersection_area(a: &Rle, b: &Rle) -> u64 {
     let mut count = 0u64;
 
     while total < n {
-        // Skip 0-length runs
+        // Advance past 0-length runs
         while ca == 0 && ai < a.counts.len() {
             ca = a.counts[ai] as u64;
             va = ai % 2 == 1;
@@ -252,21 +256,21 @@ fn intersection_area(a: &Rle, b: &Rle) -> u64 {
             vb = bi % 2 == 1;
             bi += 1;
         }
+        if ca == 0 && cb == 0 {
+            break;
+        }
 
         let step = if ca > 0 && cb > 0 {
             ca.min(cb)
         } else if ca > 0 {
             ca
-        } else if cb > 0 {
-            cb
         } else {
-            break;
+            cb
         };
 
         if va && vb {
             count += step;
         }
-
         if ca > 0 {
             ca -= step;
         }
@@ -293,34 +297,38 @@ pub fn iou(dt: &[Rle], gt: &[Rle], iscrowd: &[bool]) -> Vec<Vec<f64>> {
     let dt_areas: Vec<u64> = dt.iter().map(area).collect();
     let gt_areas: Vec<u64> = gt.iter().map(area).collect();
 
-    (0..d)
-        .into_par_iter()
-        .map(|i| {
-            let dt_a = dt_areas[i] as f64;
-            let mut row = vec![0.0f64; g];
-            for j in 0..g {
-                let inter = intersection_area(&dt[i], &gt[j]);
-                let gt_a = gt_areas[j] as f64;
-                let inter_f = inter as f64;
-                let iou_val = if iscrowd[j] {
-                    if dt_a == 0.0 {
-                        0.0
-                    } else {
-                        inter_f / dt_a
-                    }
+    let compute_row = |i: usize| {
+        let dt_a = dt_areas[i] as f64;
+        let mut row = vec![0.0f64; g];
+        for j in 0..g {
+            let inter = intersection_area(&dt[i], &gt[j]);
+            let gt_a = gt_areas[j] as f64;
+            let inter_f = inter as f64;
+            let iou_val = if iscrowd[j] {
+                if dt_a == 0.0 {
+                    0.0
                 } else {
-                    let union = dt_a + gt_a - inter_f;
-                    if union == 0.0 {
-                        0.0
-                    } else {
-                        inter_f / union
-                    }
-                };
-                row[j] = iou_val;
-            }
-            row
-        })
-        .collect()
+                    inter_f / dt_a
+                }
+            } else {
+                let union = dt_a + gt_a - inter_f;
+                if union == 0.0 {
+                    0.0
+                } else {
+                    inter_f / union
+                }
+            };
+            row[j] = iou_val;
+        }
+        row
+    };
+
+    // Use rayon only when D×G is large enough to offset thread dispatch overhead.
+    if d * g >= MIN_PARALLEL_WORK {
+        (0..d).into_par_iter().map(compute_row).collect()
+    } else {
+        (0..d).map(compute_row).collect()
+    }
 }
 
 /// Compute bbox IoU between sets of bounding boxes.
@@ -333,9 +341,9 @@ pub fn bbox_iou(dt: &[[f64; 4]], gt: &[[f64; 4]], iscrowd: &[bool]) -> Vec<Vec<f
         return vec![vec![]; d];
     }
 
-    let mut result = vec![vec![0.0f64; g]; d];
-    for i in 0..d {
+    let compute_row = |i: usize| {
         let da = dt[i][2] * dt[i][3]; // w * h
+        let mut row = vec![0.0f64; g];
         for j in 0..g {
             let ga = gt[j][2] * gt[j][3];
 
@@ -362,10 +370,17 @@ pub fn bbox_iou(dt: &[[f64; 4]], gt: &[[f64; 4]], iscrowd: &[bool]) -> Vec<Vec<f
                     inter / union
                 }
             };
-            result[i][j] = iou_val;
+            row[j] = iou_val;
         }
+        row
+    };
+
+    // Use rayon only when D×G is large enough to offset thread dispatch overhead.
+    if d * g >= MIN_PARALLEL_WORK {
+        (0..d).into_par_iter().map(compute_row).collect()
+    } else {
+        (0..d).map(compute_row).collect()
     }
-    result
 }
 
 /// Convert a polygon (flat list of `[x0, y0, x1, y1, ...]`) to RLE.
@@ -456,11 +471,10 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
     }
 
     // Stage 2: Detect column transitions (x-boundary crossings) in the upsampled
-    // boundary, downsample back to original resolution, and record the (column, row)
-    // where the polygon edge crosses into a new pixel column.
+    // boundary, downsample back to original resolution, and convert directly to
+    // column-major flat indices (skipping intermediate bx/by storage).
     let m = u.len();
-    let mut bx: Vec<i32> = Vec::with_capacity(m);
-    let mut by: Vec<i32> = Vec::with_capacity(m);
+    let mut a: Vec<u32> = Vec::with_capacity(m);
 
     for j in 1..m {
         // Only process points where the x-coordinate changed (column crossing)
@@ -481,20 +495,14 @@ pub fn fr_poly(xy: &[f64], h: u32, w: u32) -> Rle {
                 yd = h_s as f64;
             }
             yd = yd.ceil();
-            bx.push(xd as i32);
-            by.push(yd as i32);
+            // Convert (column, row) directly to column-major flat index
+            a.push((xd as u32) * h + (yd as u32));
         }
     }
 
-    // Stage 3: Convert boundary points to column-major pixel indices, sort them,
-    // compute successive differences to get run lengths, then merge any zero-length
-    // runs (which arise when two boundary points land on the same pixel).
-    let bp = bx.len();
-    let mut a: Vec<u32> = Vec::with_capacity(bp + 1);
-    // Convert (column, row) boundary points to column-major flat indices
-    for j in 0..bp {
-        a.push((bx[j] as u32) * (h) + (by[j] as u32));
-    }
+    // Stage 3: Sort flat indices, compute successive differences to get run lengths,
+    // then merge any zero-length runs (which arise when two boundary points land on
+    // the same pixel).
     // Sentinel: total pixel count marks the end of the mask
     a.push(h * w);
     a.sort_unstable();

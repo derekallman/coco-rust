@@ -560,10 +560,18 @@ impl COCOeval {
                     None => continue,
                 };
 
-                // Compute per-keypoint distances
-                let mut e_vals: Vec<f64> = Vec::with_capacity(num_kpts);
+                // Compute OKS in a single pass — sum exp(-e) over visible keypoints
+                // (or all keypoints when k1 == 0) without intermediate allocations.
+                let mut oks_sum = 0.0_f64;
+                let mut oks_count = 0_usize;
 
                 for (ki, &var_k) in vars.iter().enumerate().take(num_kpts) {
+                    // When k1 > 0, only include visible GT keypoints
+                    let visible = gt_kpts.get(ki * 3 + 2).copied().unwrap_or(0.0) > 0.0;
+                    if k1 > 0 && !visible {
+                        continue;
+                    }
+
                     let gx = gt_kpts.get(ki * 3).copied().unwrap_or(0.0);
                     let gy = gt_kpts.get(ki * 3 + 1).copied().unwrap_or(0.0);
                     let xd = dt_kpts.get(ki * 3).copied().unwrap_or(0.0);
@@ -579,25 +587,12 @@ impl COCOeval {
                     };
 
                     let e = (dx * dx + dy * dy) / var_k / gt_area / 2.0;
-                    e_vals.push(e);
+                    oks_sum += (-e).exp();
+                    oks_count += 1;
                 }
 
-                // Filter to visible keypoints if k1 > 0
-                let filtered: Vec<f64> = if k1 > 0 {
-                    e_vals
-                        .iter()
-                        .enumerate()
-                        .filter(|&(ki, _)| gt_kpts.get(ki * 3 + 2).copied().unwrap_or(0.0) > 0.0)
-                        .map(|(_, &e)| e)
-                        .collect()
-                } else {
-                    e_vals
-                };
-
-                if !filtered.is_empty() {
-                    let oks: f64 =
-                        filtered.iter().map(|&e| (-e).exp()).sum::<f64>() / filtered.len() as f64;
-                    result[i][j] = oks;
+                if oks_count > 0 {
+                    result[i][j] = oks_sum / oks_count as f64;
                 }
             }
         }
@@ -628,11 +623,16 @@ impl COCOeval {
             return None;
         }
 
-        // Load GT annotations, determine ignore flags
-        let gt_anns: Vec<_> = gt_ids
+        // Load GT annotations and track each annotation's original index in gt_ids,
+        // which corresponds to its column in the IoU matrix from compute_iou_static.
+        let gt_with_iou_idx: Vec<(usize, &crate::types::Annotation)> = gt_ids
             .iter()
-            .filter_map(|&id| coco_gt.get_ann(id))
+            .enumerate()
+            .filter_map(|(iou_idx, &id)| Some((iou_idx, coco_gt.get_ann(id)?)))
             .collect();
+        let gt_anns: Vec<&crate::types::Annotation> =
+            gt_with_iou_idx.iter().map(|&(_, ann)| ann).collect();
+        let gt_iou_indices: Vec<usize> = gt_with_iou_idx.iter().map(|&(idx, _)| idx).collect();
         let is_kp = params.iou_type == IouType::Keypoints;
         let gt_ignore: Vec<bool> = gt_anns
             .iter()
@@ -654,20 +654,25 @@ impl COCOeval {
         let gt_iscrowd_sorted: Vec<bool> = gt_order.iter().map(|&i| gt_anns[i].iscrowd).collect();
         let num_gt_not_ignored = gt_ignore_sorted.iter().filter(|&&x| !x).count();
 
-        // Load DT annotations, sort by score descending, limit to max_det
-        let mut dt_anns: Vec<_> = dt_ids
+        // Load DT annotations with their original IoU matrix row indices,
+        // sort by score descending, then limit to max_det.
+        let mut dt_with_iou_idx: Vec<(usize, &crate::types::Annotation)> = dt_ids
             .iter()
-            .filter_map(|&id| coco_dt.get_ann(id))
+            .enumerate()
+            .filter_map(|(iou_idx, &id)| Some((iou_idx, coco_dt.get_ann(id)?)))
             .collect();
-        dt_anns.sort_by(|a, b| {
-            b.score
+        dt_with_iou_idx.sort_by(|a, b| {
+            b.1.score
                 .unwrap_or(0.0)
-                .partial_cmp(&a.score.unwrap_or(0.0))
+                .partial_cmp(&a.1.score.unwrap_or(0.0))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        if dt_anns.len() > max_det {
-            dt_anns.truncate(max_det);
+        if dt_with_iou_idx.len() > max_det {
+            dt_with_iou_idx.truncate(max_det);
         }
+        let dt_anns: Vec<&crate::types::Annotation> =
+            dt_with_iou_idx.iter().map(|&(_, ann)| ann).collect();
+        let dt_iou_indices: Vec<usize> = dt_with_iou_idx.iter().map(|&(idx, _)| idx).collect();
 
         let dt_scores: Vec<f64> = dt_anns.iter().map(|a| a.score.unwrap_or(0.0)).collect();
 
@@ -694,67 +699,90 @@ impl COCOeval {
         let mut dt_ignore_flags = vec![vec![false; d]; num_iou_thrs];
 
         if let Some(iou_mat) = iou_matrix {
-            // Precompute remapped IoU matrix indexed by (dt_anns order, gt_order)
-            // so we can use direct array indexing instead of HashMap lookups.
-            let dt_id_to_iou_idx: HashMap<u64, usize> =
-                dt_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
-            let gt_id_to_iou_idx: HashMap<u64, usize> =
-                gt_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+            // Build a flat D×G IoU matrix in row-major order (one allocation).
+            // dt_iou_indices[di] is the row in iou_mat for the di-th detection (score-sorted).
+            // gt_iou_indices[gt_order[gi]] is the column for the gi-th GT (ignore-sorted).
+            let mut iou_flat = vec![0.0_f64; d * g];
+            for di in 0..d {
+                let dt_row = dt_iou_indices[di];
+                for (gi_sorted, &gi_orig) in gt_order.iter().enumerate() {
+                    let gt_col = gt_iou_indices[gi_orig];
+                    if dt_row < iou_mat.len() && gt_col < iou_mat[dt_row].len() {
+                        iou_flat[di * g + gi_sorted] = iou_mat[dt_row][gt_col];
+                    }
+                }
+            }
 
-            let iou_reordered: Vec<Vec<f64>> = dt_anns
-                .iter()
-                .map(|dt_ann| {
-                    let dt_idx = dt_id_to_iou_idx.get(&dt_ann.id).copied();
-                    gt_order
-                        .iter()
-                        .map(|&gi_orig| {
-                            let gt_idx = gt_id_to_iou_idx.get(&gt_anns[gi_orig].id).copied();
-                            match (dt_idx, gt_idx) {
-                                (Some(di), Some(gi))
-                                    if di < iou_mat.len() && gi < iou_mat[di].len() =>
-                                {
-                                    iou_mat[di][gi]
-                                }
-                                _ => 0.0,
-                            }
-                        })
-                        .collect()
+            // For each detection, build two sorted GT index lists (by descending IoU):
+            // one for non-ignored GTs, one for ignored GTs. This enables early exit
+            // within each group while preserving pycocotools' two-phase matching
+            // semantics: non-ignored GTs are always preferred over ignored ones.
+            let non_ignored_by_iou: Vec<Vec<usize>> = (0..d)
+                .map(|di| {
+                    let base = di * g;
+                    let mut indices: Vec<usize> = (0..num_gt_not_ignored).collect();
+                    indices.sort_by(|&a, &b| {
+                        iou_flat[base + b]
+                            .partial_cmp(&iou_flat[base + a])
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    indices
+                })
+                .collect();
+            let ignored_by_iou: Vec<Vec<usize>> = (0..d)
+                .map(|di| {
+                    let base = di * g;
+                    let mut indices: Vec<usize> = (num_gt_not_ignored..g).collect();
+                    indices.sort_by(|&a, &b| {
+                        iou_flat[base + b]
+                            .partial_cmp(&iou_flat[base + a])
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    indices
                 })
                 .collect();
 
             // Greedy matching: for each IoU threshold, iterate detections in
             // score-descending order and greedily match each to the best available GT.
+            //
+            // Two-phase matching (matches pycocotools exactly):
+            //   Phase 1: scan non-ignored GTs in descending IoU order.
+            //   Phase 2: only if phase 1 found no match, scan ignored GTs.
+            // Within each phase, early-exit once IoU drops below best_iou.
             for (t_idx, &iou_thr) in params.iou_thrs.iter().enumerate() {
                 for (di, dt_ann) in dt_anns.iter().enumerate() {
-                    // Track the best GT match: iou must exceed the threshold
                     let mut best_iou = iou_thr;
                     let mut best_gi: Option<usize> = None;
+                    let base = di * g;
 
-                    let dt_row = &iou_reordered[di];
-
-                    for (gi_sorted, &iou_val) in dt_row.iter().enumerate() {
-                        // Skip already matched non-crowd GTs (pycocotools uses iscrowd,
-                        // not the full ignore flag, so crowd GTs can be matched multiple times)
-                        if gt_matched[t_idx][gi_sorted] && !gt_iscrowd_sorted[gi_sorted] {
-                            continue;
-                        }
-
-                        // Match: iou must meet threshold, prefer non-ignored GT
+                    // Phase 1: non-ignored GTs (descending IoU, early exit)
+                    for &gi in &non_ignored_by_iou[di] {
+                        let iou_val = iou_flat[base + gi];
                         if iou_val < best_iou {
+                            break;
+                        }
+                        if gt_matched[t_idx][gi] && !gt_iscrowd_sorted[gi] {
                             continue;
                         }
+                        best_iou = iou_val;
+                        best_gi = Some(gi);
+                    }
 
-                        // Prefer non-ignored GT over ignored GT
-                        if let Some(prev_gi) = best_gi {
-                            let best_ignored = gt_ignore_sorted[prev_gi];
-                            let curr_ignored = gt_ignore_sorted[gi_sorted];
-                            if !best_ignored && curr_ignored {
+                    // Phase 2: ignored GTs — only if no non-ignored match found.
+                    // This matches pycocotools' `if m>-1 and gtIg[m]==0: break`
+                    // which stops at the first ignored GT when a non-ignored match exists.
+                    if best_gi.is_none() {
+                        for &gi in &ignored_by_iou[di] {
+                            let iou_val = iou_flat[base + gi];
+                            if iou_val < best_iou {
+                                break;
+                            }
+                            if gt_matched[t_idx][gi] && !gt_iscrowd_sorted[gi] {
                                 continue;
                             }
+                            best_iou = iou_val;
+                            best_gi = Some(gi);
                         }
-
-                        best_iou = iou_val;
-                        best_gi = Some(gi_sorted);
                     }
 
                     if let Some(gi) = best_gi {
@@ -836,18 +864,24 @@ impl COCOeval {
             std::iter::once((u64::MAX, 0usize)).collect()
         };
 
+        // Build area_rng → index lookup using bit-exact f64 keys (avoids linear search).
+        // area_rng values are copied verbatim from params, so bit-exact equality is safe.
+        let area_rng_to_idx: HashMap<[u64; 2], usize> = self
+            .params
+            .area_rng
+            .iter()
+            .enumerate()
+            .map(|(i, &rng)| ([rng[0].to_bits(), rng[1].to_bits()], i))
+            .collect();
+
         // Group eval_imgs by (k_idx, a_idx) — O(eval_imgs) once.
         // Replaces the old dense index formula k_actual * (a * N) + a_idx * N + img_idx,
         // which assumed a specific dense layout that no longer applies after the sparse refactor.
         let mut grouped: Vec<Vec<&EvalImg>> = vec![Vec::new(); k * a];
         for eval in self.eval_imgs.iter().flatten() {
             if let Some(&k_idx) = cat_id_to_k_idx.get(&eval.category_id) {
-                let a_idx = self
-                    .params
-                    .area_rng
-                    .iter()
-                    .position(|&rng| rng == eval.area_rng)
-                    .unwrap_or(0);
+                let a_key = [eval.area_rng[0].to_bits(), eval.area_rng[1].to_bits()];
+                let a_idx = area_rng_to_idx.get(&a_key).copied().unwrap_or(0);
                 grouped[k_idx * a + a_idx].push(eval);
             }
         }
@@ -1888,11 +1922,10 @@ impl COCOeval {
     /// | `Dupe` | Duplicate — correct class GT already claimed by higher-scoring TP |
     /// | `Bkg`  | Pure background (IoU < `bg_thr` with all GTs) |
     /// | `Miss` | Undetected GT (false negative) |
-    pub fn tide_errors(&self, pos_thr: f64, bg_thr: f64) -> TideErrors {
-        assert!(
-            !self.eval_imgs.is_empty(),
-            "tide_errors() requires evaluate() to be called first"
-        );
+    pub fn tide_errors(&self, pos_thr: f64, bg_thr: f64) -> Result<TideErrors, String> {
+        if self.eval_imgs.is_empty() {
+            return Err("tide_errors() requires evaluate() to be called first".to_string());
+        }
 
         let cat_ids = self.params.cat_ids.clone();
         let iou_type = self.params.iou_type;
@@ -2372,12 +2405,12 @@ impl COCOeval {
         delta_ap.insert("FP".to_string(), mean_ap(&d_fp));
         delta_ap.insert("FN".to_string(), miss_mean);
 
-        TideErrors {
+        Ok(TideErrors {
             delta_ap,
             counts,
             ap_base,
             pos_thr,
             bg_thr,
-        }
+        })
     }
 }

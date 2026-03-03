@@ -337,19 +337,13 @@ impl COCO {
                     ann.iscrowd = false;
                 }
             } else if has_seg && !has_kpts {
-                // segmentation results: area from mask RLE
-                // Build a temporary COCO to use ann_to_rle
-                let temp = COCO::from_dataset(Dataset {
-                    info: dataset.info.clone(),
-                    images: dataset.images.clone(),
-                    annotations: dataset.annotations.clone(),
-                    categories: dataset.categories.clone(),
-                    licenses: dataset.licenses.clone(),
-                });
+                // segmentation results: area from mask RLE.
+                // Use the GT COCO (self) for image lookups — detection results
+                // share the same images, so self.get_img finds the right dims.
                 for ann in &mut dataset.annotations {
                     if let Some(crate::types::Segmentation::CompressedRle { .. }) = ann.segmentation
                     {
-                        if let Some(rle) = temp.ann_to_rle(ann) {
+                        if let Some(rle) = self.ann_to_rle(ann) {
                             ann.area = Some(mask::area(&rle) as f64);
                             if ann.bbox.is_none() {
                                 let bb = mask::to_bbox(&rle);

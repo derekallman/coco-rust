@@ -32,7 +32,11 @@ pub fn annotation_to_py(py: Python<'_>, ann: &Annotation) -> PyResult<PyObject> 
 pub fn segmentation_to_py(py: Python<'_>, seg: &Segmentation) -> PyResult<PyObject> {
     match seg {
         Segmentation::Polygon(polys) => {
-            let list = PyList::new(py, polys.iter().map(|p| PyList::new(py, p.iter()).unwrap()))?;
+            let inner_lists: Vec<Bound<'_, PyList>> = polys
+                .iter()
+                .map(|p| PyList::new(py, p.iter()))
+                .collect::<PyResult<_>>()?;
+            let list = PyList::new(py, inner_lists)?;
             Ok(list.into_any().unbind())
         }
         Segmentation::CompressedRle { size, counts } => {
@@ -56,7 +60,12 @@ pub fn py_to_annotation(dict: &Bound<'_, PyDict>) -> PyResult<Annotation> {
         .map(|v| v.extract())
         .transpose()?
         .unwrap_or(0);
-    let image_id: u64 = dict.get_item("image_id")?.unwrap().extract()?;
+    let image_id: u64 = dict
+        .get_item("image_id")?
+        .ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err("annotation dict missing 'image_id'")
+        })?
+        .extract()?;
     let category_id: u64 = dict
         .get_item("category_id")?
         .map(|v| v.extract())
@@ -103,8 +112,13 @@ pub fn py_to_annotation(dict: &Bound<'_, PyDict>) -> PyResult<Annotation> {
 fn py_to_segmentation(obj: &Bound<'_, PyAny>) -> PyResult<Segmentation> {
     // Try as dict (CompressedRle or UncompressedRle)
     if let Ok(dict) = obj.downcast::<PyDict>() {
-        let size: [u32; 2] = dict.get_item("size")?.unwrap().extract()?;
-        let counts_obj = dict.get_item("counts")?.unwrap();
+        let size: [u32; 2] = dict
+            .get_item("size")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("RLE dict missing 'size'"))?
+            .extract()?;
+        let counts_obj = dict
+            .get_item("counts")?
+            .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("RLE dict missing 'counts'"))?;
         if let Ok(s) = counts_obj.extract::<String>() {
             return Ok(Segmentation::CompressedRle { size, counts: s });
         }
@@ -218,7 +232,9 @@ pub fn py_to_rle(dict: &Bound<'_, PyDict>) -> PyResult<Rle> {
     // Support both {"h", "w", "counts": [ints]} and {"size": [h,w], "counts": "string"}
     if let Some(size_obj) = dict.get_item("size")? {
         let size: [u32; 2] = size_obj.extract()?;
-        let counts_obj = dict.get_item("counts")?.unwrap();
+        let counts_obj = dict.get_item("counts")?.ok_or_else(|| {
+            pyo3::exceptions::PyValueError::new_err("RLE dict has 'size' but missing 'counts'")
+        })?;
         if let Ok(s) = counts_obj.extract::<String>() {
             return hotcoco_core::mask::rle_from_string(&s, size[0], size[1])
                 .map_err(pyo3::exceptions::PyValueError::new_err);
@@ -230,8 +246,17 @@ pub fn py_to_rle(dict: &Bound<'_, PyDict>) -> PyResult<Rle> {
             counts,
         });
     }
-    let h: u32 = dict.get_item("h")?.unwrap().extract()?;
-    let w: u32 = dict.get_item("w")?.unwrap().extract()?;
-    let counts: Vec<u32> = dict.get_item("counts")?.unwrap().extract()?;
+    let h: u32 = dict
+        .get_item("h")?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("RLE dict missing 'h'"))?
+        .extract()?;
+    let w: u32 = dict
+        .get_item("w")?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("RLE dict missing 'w'"))?
+        .extract()?;
+    let counts: Vec<u32> = dict
+        .get_item("counts")?
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("RLE dict missing 'counts'"))?
+        .extract()?;
     Ok(Rle { h, w, counts })
 }

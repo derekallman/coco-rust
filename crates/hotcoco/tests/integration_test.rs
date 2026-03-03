@@ -1338,7 +1338,7 @@ fn test_confusion_matrix_max_det() {
 fn run_tide(coco_gt: COCO, coco_dt: COCO) -> hotcoco::TideErrors {
     let mut ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
     ev.evaluate();
-    ev.tide_errors(0.5, 0.1)
+    ev.tide_errors(0.5, 0.1).expect("tide_errors failed")
 }
 
 /// Test 1: all DTs are perfect TPs → all ΔAP = 0, all counts = 0.
