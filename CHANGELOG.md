@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `ConfusionMatrix.cat_names` / `confusion_matrix()` dict now includes `"cat_names"` — category names parallel to `cat_ids`, eliminating a manual `load_cats` lookup after computing a confusion matrix
+- `EvalResults.hotcoco_version` — records the library version that produced the results file; included in the `results()` dict and saved JSON
+- `TideErrors` now derives `Serialize` (Rust) — can be serialized directly with `serde_json`
+
+### Changed
+
+- `EvalResults::to_json_string()` renamed to `to_json()` for consistency with Rust naming conventions
+
 ## [0.2.0] - 2026-03-11
 
 ### Added
@@ -22,14 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Documentation: added paper citations for COCO eval (Lin et al. ECCV 2014), OKS (cocodataset.org), LVIS (Gupta et al. ECCV 2019), and TIDE (Bolya et al. ECCV 2020 arxiv); area range notation clarified to square pixels (px²); LVIS frequency definition corrected from instance count to training image count
 
 ### Added
-
-- `ConfusionMatrix.cat_names` / `confusion_matrix()` dict now includes `"cat_names"` — category names parallel to `cat_ids`, eliminating a manual `load_cats` lookup after computing a confusion matrix
-- `EvalResults.hotcoco_version` — records the library version that produced the results file; included in the `results()` dict and saved JSON
-- `TideErrors` now derives `Serialize` (Rust) — can be serialized directly with `serde_json`
-
-### Changed
-
-- `EvalResults::to_json_string()` renamed to `to_json()` for consistency with Rust naming conventions
 
 - `COCOeval.results(per_class=False)` — return serializable evaluation results as a dict; `save_results(path, per_class=False)` writes the same structure as pretty-printed JSON
 - `coco-eval --output / -o <path>` — CLI flag to write evaluation results JSON after evaluation (always includes per-category AP)
