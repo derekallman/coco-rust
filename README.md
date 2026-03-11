@@ -23,6 +23,8 @@ Benchmarked on COCO val2017 (5,000 images, 36,781 ground truth annotations, ~43,
 
 Speedups in parentheses are vs pycocotools. Results verified against pycocotools on COCO val2017 with a 10,000+ case parity test suite — your AP scores won't change.
 
+At scale (Objects365 val — 80k images, 365 categories, 1.2M detections), hotcoco completes in **18s** vs 721s for pycocotools (**39x**) and 251s for faster-coco-eval (**14x**) — while using half the memory. See the [full benchmarks](https://derekallman.github.io/hotcoco/benchmarks/).
+
 ## Quick Start
 
 ### Python

@@ -28,7 +28,8 @@ import psutil
 
 _WORKSPACE = Path(__file__).resolve().parents[3]
 _DATA = _WORKSPACE / "data"
-RUST_BIN = str(_WORKSPACE / "target/release/coco-eval")
+_BIN_NAME = "coco-eval.exe" if sys.platform == "win32" else "coco-eval"
+RUST_BIN = str(_WORKSPACE / "target/release" / _BIN_NAME)
 
 
 def parse_args():
@@ -98,22 +99,46 @@ def generate_detections(gt_path, max_det_per_image, out_path):
     return out_path
 
 
-def peak_rss_thread(proc, result):
-    """Poll a subprocess's RSS in a background thread; store peak in result[0]."""
-    peak = 0
+def peak_memory_thread(proc, result):
+    """Poll a subprocess's memory (including children) in a background thread.
+
+    result is [peak_physical, peak_committed].
+    On Windows, uses peak_wset (OS-tracked, no polling gaps) for physical and
+    pagefile usage for total committed (physical + swap).  Falls back to RSS
+    polling on other platforms.
+    Sums across the process tree to capture real memory usage when the
+    subprocess is a wrapper/shim that spawns child processes.
+    """
+    peak_phys = 0
+    peak_commit = 0
     try:
         p = psutil.Process(proc.pid)
         while proc.poll() is None:
             try:
-                mem = p.memory_info().rss
-                if mem > peak:
-                    peak = mem
+                procs = [p] + p.children(recursive=True)
+                phys = 0
+                commit = 0
+                for child in procs:
+                    try:
+                        mi = child.memory_info()
+                        if sys.platform == "win32":
+                            phys += getattr(mi, "peak_wset", mi.rss)
+                            commit += getattr(mi, "pagefile", 0)
+                        else:
+                            phys += mi.rss
+                    except psutil.NoSuchProcess:
+                        continue
+                if phys > peak_phys:
+                    peak_phys = phys
+                if commit > peak_commit:
+                    peak_commit = commit
             except psutil.NoSuchProcess:
                 break
             time.sleep(0.05)
     except psutil.NoSuchProcess:
         pass
-    result[0] = peak
+    result[0] = peak_phys
+    result[1] = peak_commit
 
 
 _FASTER_RUNNER = """
@@ -128,12 +153,25 @@ ev.accumulate()
 ev.summarize()
 """
 
+_PYCOCOTOOLS_RUNNER = """
+import sys, time
+from pycocotools.coco import COCO
+from pycocotools.cocoeval import COCOeval
+gt_file, dt_file = sys.argv[1], sys.argv[2]
+gt = COCO(gt_file)
+dt = gt.loadRes(dt_file)
+ev = COCOeval(gt, dt, "bbox")
+ev.evaluate()
+ev.accumulate()
+ev.summarize()
+"""
 
-def bench_faster_coco_eval(gt_file, dt_file):
+
+def _bench_python_runner(script, gt_file, dt_file, label):
     import tempfile
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(_FASTER_RUNNER)
+        f.write(script)
         runner = f.name
 
     try:
@@ -144,8 +182,8 @@ def bench_faster_coco_eval(gt_file, dt_file):
             text=True,
         )
 
-        peak_result = [0]
-        monitor = threading.Thread(target=peak_rss_thread, args=(proc, peak_result))
+        peak_result = [0, 0]
+        monitor = threading.Thread(target=peak_memory_thread, args=(proc, peak_result))
         monitor.start()
 
         t0 = time.perf_counter()
@@ -156,17 +194,25 @@ def bench_faster_coco_eval(gt_file, dt_file):
         os.unlink(runner)
 
     if proc.returncode != 0:
-        print(f"  faster-coco-eval failed:\n{stderr}", file=sys.stderr)
-        return None, None
+        print(f"  {label} failed:\n{stderr}", file=sys.stderr)
+        return None, None, None
 
-    return elapsed, peak_result[0]
+    return elapsed, peak_result[0], peak_result[1]
+
+
+def bench_faster_coco_eval(gt_file, dt_file):
+    return _bench_python_runner(_FASTER_RUNNER, gt_file, dt_file, "faster-coco-eval")
+
+
+def bench_pycocotools(gt_file, dt_file):
+    return _bench_python_runner(_PYCOCOTOOLS_RUNNER, gt_file, dt_file, "pycocotools")
 
 
 def bench_hotcoco(gt_file, dt_file):
     if not os.path.exists(RUST_BIN):
         print(f"  hotcoco binary not found at {RUST_BIN} — skipping")
         print("  Run: cargo build -p hotcoco-cli --release")
-        return None, None
+        return None, None, None
 
     proc = subprocess.Popen(
         [RUST_BIN, "--gt", gt_file, "--dt", dt_file, "--iou-type", "bbox"],
@@ -175,8 +221,8 @@ def bench_hotcoco(gt_file, dt_file):
         text=True,
     )
 
-    peak_result = [0]
-    monitor = threading.Thread(target=peak_rss_thread, args=(proc, peak_result))
+    peak_result = [0, 0]
+    monitor = threading.Thread(target=peak_memory_thread, args=(proc, peak_result))
     monitor.start()
 
     t0 = time.perf_counter()
@@ -186,9 +232,9 @@ def bench_hotcoco(gt_file, dt_file):
 
     if proc.returncode != 0:
         print(f"  hotcoco failed:\n{stderr}", file=sys.stderr)
-        return None, None
+        return None, None, None
 
-    return elapsed, peak_result[0]
+    return elapsed, peak_result[0], peak_result[1]
 
 
 def fmt_time(t):
@@ -233,29 +279,41 @@ def main():
     print("Objects365 val — bbox evaluation")
     print("=" * 65)
 
-    fc_time, fc_mem = None, None
-    hc_time, hc_mem = None, None
+    pc_time, pc_phys, pc_commit = None, None, None
+    fc_time, fc_phys, fc_commit = None, None, None
+    hc_time, hc_phys, hc_commit = None, None, None
 
     print("Running hotcoco ...", flush=True)
-    hc_time, hc_mem = bench_hotcoco(args.gt, dt_file)
+    hc_time, hc_phys, hc_commit = bench_hotcoco(args.gt, dt_file)
     if hc_time is not None:
-        print(f"  done in {hc_time:.2f}s, peak RSS {fmt_mem(hc_mem)}")
+        print(f"  done in {hc_time:.2f}s, peak RAM {fmt_mem(hc_phys)}, committed {fmt_mem(hc_commit)}")
 
     print("Running faster-coco-eval ...", flush=True)
     try:
-        fc_time, fc_mem = bench_faster_coco_eval(args.gt, dt_file)
-        print(f"  done in {fc_time:.2f}s, peak RSS {fmt_mem(fc_mem)}")
+        fc_time, fc_phys, fc_commit = bench_faster_coco_eval(args.gt, dt_file)
+        if fc_time is not None:
+            print(f"  done in {fc_time:.2f}s, peak RAM {fmt_mem(fc_phys)}, committed {fmt_mem(fc_commit)}")
+    except Exception as e:
+        print(f"  FAILED: {e}")
+
+    print("Running pycocotools ...", flush=True)
+    try:
+        pc_time, pc_phys, pc_commit = bench_pycocotools(args.gt, dt_file)
+        if pc_time is not None:
+            print(f"  done in {pc_time:.2f}s, peak RAM {fmt_mem(pc_phys)}, committed {fmt_mem(pc_commit)}")
     except Exception as e:
         print(f"  FAILED: {e}")
 
     print()
-    print("=" * 65)
-    print(f"{'Library':<20} {'Time':>8}  {'Peak RAM':>8}  {'vs faster-coco-eval':>19}")
-    print("-" * 65)
-    print(f"{'faster-coco-eval':<20} {fmt_time(fc_time)}  {fmt_mem(fc_mem)}  {'(baseline)':>19}")
-    print(f"{'hotcoco':<20} {fmt_time(hc_time)}  {fmt_mem(hc_mem)}  {fmt_speedup(fc_time, hc_time):>19}")
-    print("=" * 65)
-    print("(pycocotools: DNF at O365 scale)")
+    print("=" * 80)
+    print(f"{'Library':<20} {'Time':>8}  {'Peak RAM':>9}  {'Committed':>9}  {'Speedup':>9}")
+    print("-" * 80)
+    print(f"{'pycocotools':<20} {fmt_time(pc_time)}  {fmt_mem(pc_phys)}  {fmt_mem(pc_commit)}  {'baseline':>9}")
+    print(f"{'faster-coco-eval':<20} {fmt_time(fc_time)}  {fmt_mem(fc_phys)}  {fmt_mem(fc_commit)}  {fmt_speedup(pc_time, fc_time):>9}")
+    print(f"{'hotcoco':<20} {fmt_time(hc_time)}  {fmt_mem(hc_phys)}  {fmt_mem(hc_commit)}  {fmt_speedup(pc_time, hc_time):>9}")
+    print("=" * 80)
+    if sys.platform == "win32":
+        print("Peak RAM = peak working set; Committed = pagefile (phys + swap)")
 
 
 if __name__ == "__main__":

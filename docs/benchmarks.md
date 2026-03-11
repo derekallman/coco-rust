@@ -17,7 +17,7 @@
 | **Rust API** | No | No | Yes — native crate on crates.io |
 | **CLI** | No | No | Yes — `coco` (Python) + `coco-eval` (Rust) |
 | **Results export** | No | No | Yes — JSON with params + metrics + per-class |
-| **Memory at scale** | OOM on O365 | ~25 GB on O365 | Sparse eval, completes cleanly |
+| **Memory at scale** | 24 GB committed on O365 | 30 GB committed on O365 | 8 GB committed on O365 |
 | **Python versions** | 3.7+ | 3.8+ | 3.9+ |
 | **License** | BSD | BSD | MIT |
 
@@ -50,6 +50,22 @@ Scaling detections by 10x (~368,000) to test behavior under higher load:
 | keypoints | 16.93s | 16.28s (1.0×) | **1.76s (9.6×)** |
 
 hotcoco scales better at higher detection counts due to multi-threaded evaluation.
+
+### Objects365 scale benchmark
+
+**Hardware:** Windows 11, AMD Ryzen 5 5600X, 16 GB RAM + swap
+**Dataset:** Objects365 val — 80,000 images, 1.2M annotations, 365 categories
+**Detections:** ~1.2M synthetic bbox (capped at 100/image, seed=42)
+**Timing:** Wall clock time, single run
+**Versions:** pycocotools 2.0.11, faster-coco-eval 1.7.2, hotcoco 0.1.0
+
+| Library | Time | Peak RAM | Committed | Speedup |
+|---------|------|----------|-----------|---------|
+| pycocotools | 721.18s | 14.34 GB | 23.71 GB | baseline |
+| faster-coco-eval | 250.90s | 14.57 GB | 29.96 GB | 2.9x |
+| **hotcoco** | **18.32s** | **7.47 GB** | **8.11 GB** | **39.4x** |
+
+Peak RAM is the peak working set (physical memory). Committed includes swap — both pycocotools and faster-coco-eval exceeded physical RAM and relied heavily on the pagefile, which significantly inflated their wall clock times. hotcoco completed within physical memory with minimal swap.
 
 ## Metric parity
 
