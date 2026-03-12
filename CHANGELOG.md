@@ -15,7 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `docs/guide/pytorch.md` — full guide for `CocoDetection` and `CocoEvaluator`: transforms, distributed training, multi-iou-type evaluation, migration from torchvision
 - `docs/guide/frameworks.md` — Detectron2, MMDetection, RF-DETR integration via `init_as_pycocotools()`; Ultralytics `save_json` workflow; LVIS-based pipeline drop-in via `init_as_lvis()`
 - Feature comparison table in `docs/benchmarks.md` — hotcoco vs pycocotools vs faster-coco-eval across installation, parity, LVIS, TIDE, confusion matrix, dataset ops, PyTorch integration, CLI, memory, and license
-- Sample data section in `docs/getting-started/installation.md` — downloads COCO val2014 annotations and synthetic results from cocoapi, with a working sanity-check snippet
+- `scripts/download_coco.py` — downloads COCO val2017 annotations and generates deterministic parity result files; replaces the old untracked `data/gen_*.py` scripts
+- `scripts/download_o365.py` — downloads Objects365 validation annotations from HuggingFace (moved from gitignored `data/`, now tracked)
+- `just download-coco`, `just download-o365`, `just download-all` recipes in `Justfile`
+- Benchmark data section in `docs/getting-started/installation.md` — one-command setup for COCO val2017 and Objects365 benchmark data via `just download-coco` / `just download-o365`
 - Rust examples: `crates/hotcoco/examples/basic_eval.rs` and `custom_params.rs` — runnable end-to-end evaluation examples with `cargo run --example`
 - Notebook link surfaced in quickstart "Next steps" and index hero actions
 - "Troubleshooting", "PyTorch Integration", and "Framework Integrations" added to `zensical.toml` nav
@@ -32,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Consolidated repo layout: single root `pyproject.toml` (maturin `manifest-path` pattern); Python package source moved from `crates/hotcoco-pyo3/python/` to root `python/`; all scripts moved from `crates/hotcoco-pyo3/data/` to root `scripts/`
+- `Justfile` added at repo root with `build`, `test`, `parity`, `bench`, `lint`, `fmt`, `fmt-check`, `download-coco`, `download-o365`, `download-all` recipes — replaces ad-hoc `uv run python ...` invocations
 - `EvalResults::to_json_string()` renamed to `to_json()` for consistency with Rust naming conventions
 
 ## [0.2.0] - 2026-03-11
