@@ -348,7 +348,7 @@ def scenario_kp_zero_keypoints():
 # ---------------------------------------------------------------------------
 
 def write_fixture(name, fixture_data):
-    """Write fixture to adversarial_fixtures/<name>.json. Returns Path."""
+    """Write fixture to scripts/fixtures/adversarial/<name>.json. Returns Path."""
     path = FIXTURE_DIR / f"{name}.json"
     with open(path, "w") as f:
         json.dump(fixture_data, f, indent=2)

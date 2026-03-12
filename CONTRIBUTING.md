@@ -7,7 +7,8 @@ Thanks for your interest in contributing! This guide covers everything you need 
 ### Prerequisites
 
 - [Rust](https://rustup.rs/) (stable, 1.70+)
-- [uv](https://docs.astral.sh/uv/) for Python dependency management
+- [uv](https://docs.astral.sh/uv/) — Python dependency management (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- [just](https://just.systems/) — task runner (`cargo install just`)
 - Python 3.9+
 
 ### Build the Rust library
@@ -22,10 +23,8 @@ cargo test
 ### Build the Python bindings
 
 ```bash
-cd crates/hotcoco-pyo3
-uv venv
-uv pip install maturin ".[dev]"
-uv run maturin develop --release
+uv sync --all-extras  # creates .venv at repo root with all dev deps
+just build            # builds and installs the extension into .venv
 ```
 
 Verify the install:
@@ -57,8 +56,7 @@ If formatting fails, run `cargo fmt --all` and re-commit. Fix all clippy warning
 Verify metric parity against pycocotools on COCO val2017:
 
 ```bash
-cd crates/hotcoco-pyo3
-uv run python data/parity.py
+just parity
 ```
 
 Tolerances: bbox ≤ 1e-4, segm ≤ 2e-4, keypoints exact.
@@ -68,8 +66,7 @@ Tolerances: bbox ≤ 1e-4, segm ≤ 2e-4, keypoints exact.
 Smoke test:
 
 ```bash
-cd crates/hotcoco-pyo3
-uv run maturin develop --release
+just build
 uv run python -c "import hotcoco"
 ```
 
@@ -82,9 +79,9 @@ uv run python -c "import hotcoco"
 ## Tests
 
 ```bash
-cargo test                    # All Rust tests
-cargo test -p hotcoco         # Library tests only
-cd crates/hotcoco-pyo3 && uv run pytest data/test_parity.py -v
+cargo test            # All Rust tests
+cargo test -p hotcoco # Library tests only
+just test             # Build + cargo test + pytest hypothesis suite
 ```
 
 Test fixtures live in `crates/hotcoco/tests/fixtures/`. When adding a new feature that touches evaluation, add a corresponding Rust integration test.

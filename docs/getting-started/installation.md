@@ -17,13 +17,20 @@ print("hotcoco installed successfully")
     hotcoco requires numpy, which is installed automatically. If you need a specific numpy version, install it first.
 
 ??? info "Build from source"
+    Install prerequisites if you don't have them:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh   # uv
+    cargo install just                                  # just (requires Rust)
+    ```
+
+    Then clone and build:
     ```bash
     git clone https://github.com/derekallman/hotcoco.git
-    cd hotcoco/crates/hotcoco-pyo3
-    pip install maturin
-    maturin develop --release
+    cd hotcoco
+    uv sync --all-extras
+    just build
     ```
-    This builds the `hotcoco` Python module and installs it into your active environment.
+    This builds the `hotcoco` Python module and installs it into the repo's `.venv`.
 
 ## CLI
 
@@ -56,45 +63,45 @@ hotcoco = "0.1"
 
 Full API documentation is on [docs.rs](https://docs.rs/hotcoco).
 
-## Sample data
+## Benchmark data
 
-The fastest way to get something running is to use the [COCO](https://cocodataset.org/) val2014 annotations and the synthetic detection results from the [cocoapi repository](https://github.com/ppwwyyxx/cocoapi). Everything downloads in seconds and no images are needed.
+hotcoco's parity checks and benchmarks run against COCO val2017. A single command downloads
+the annotations and generates synthetic detection files:
 
 ```bash
-# Annotations (~240 MB — instances + keypoints)
-wget http://images.cocodataset.org/annotations/annotations_trainval2014.zip
-unzip annotations_trainval2014.zip
-
-# Synthetic detection results (a few KB each)
-BASE=https://raw.githubusercontent.com/ppwwyyxx/cocoapi/master/results
-wget $BASE/instances_val2014_fakebbox100_results.json
-wget $BASE/instances_val2014_fakesegm100_results.json
-wget $BASE/person_keypoints_val2014_fakekeypoints100_results.json
+just download-coco   # ~240 MB — val2017 annotations + parity result files
 ```
 
-Expected directory layout after the downloads:
+After that, `just parity` and `just bench` work out of the box. For Objects365 scale benchmarks:
+
+```bash
+# Requires polars: uv pip install polars
+just download-o365   # ~220 MB — Objects365 validation annotations from HuggingFace
+```
+
+Expected layout after `just download-coco`:
 
 ```
-.
+data/
 ├── annotations/
-│   ├── instances_val2014.json
-│   └── person_keypoints_val2014.json
-├── instances_val2014_fakebbox100_results.json
-├── instances_val2014_fakesegm100_results.json
-└── person_keypoints_val2014_fakekeypoints100_results.json
+│   ├── instances_val2017.json
+│   └── person_keypoints_val2017.json
+├── bbox_val2017_results.json
+├── segm_val2017_results.json
+└── kpt_val2017_results.json
 ```
 
-Then run a quick sanity check:
+Quick sanity check:
 
 ```python
 from hotcoco import COCO, COCOeval
 
-coco_gt = COCO("annotations/instances_val2014.json")
-coco_dt = coco_gt.load_res("instances_val2014_fakebbox100_results.json")
+coco_gt = COCO("data/annotations/instances_val2017.json")
+coco_dt = coco_gt.load_res("data/bbox_val2017_results.json")
 
 ev = COCOeval(coco_gt, coco_dt, "bbox")
 ev.run()
 ```
 
 !!! tip
-    The images (13 GB for val2014) are only needed if you're loading them for visualization or using `CocoDetection` with a dataloader. For evaluation alone, only the JSON files are required.
+    Images are never needed for evaluation — only the JSON annotation and result files.

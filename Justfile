@@ -15,6 +15,17 @@ parity: build
 bench: build
     uv run python scripts/bench.py
 
+# Download COCO val2017 annotations + generate parity result files (~240 MB)
+download-coco:
+    uv run python scripts/download_coco.py
+
+# Download Objects365 validation set from HuggingFace (~220 MB, requires polars)
+download-o365:
+    uv run python scripts/download_o365.py
+
+# Download everything needed for all benchmarks
+download-all: download-coco download-o365
+
 # Lint (warnings are errors, matches CI)
 lint:
     cargo clippy --workspace --all-targets -- -D warnings
