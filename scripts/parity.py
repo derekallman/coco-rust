@@ -8,8 +8,9 @@ Tolerances match documented verified parity:
   segm:      <= 2e-4
   keypoints: exact (0)
 
-Usage (from crates/hotcoco-pyo3/):
-    uv run python data/parity.py
+Usage:
+    uv run python scripts/parity.py
+    just parity
 """
 
 import contextlib
@@ -23,7 +24,7 @@ from pycocotools.cocoeval import COCOeval as PyCOCOeval
 
 from hotcoco import COCO, COCOeval
 
-WORKSPACE = Path(__file__).resolve().parents[3]
+WORKSPACE = Path(__file__).resolve().parents[1]
 DATA = WORKSPACE / "data"
 
 BENCHMARKS = [

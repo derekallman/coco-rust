@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Parity check: hotcoco tide_errors() vs tidecv reference.
 
-Run from crates/hotcoco-pyo3/:
-    uv run python data/bench_tide_parity.py
+Usage:
+    uv run python scripts/parity_tide.py
 
 Requires: uv pip install tidecv
 
@@ -16,9 +16,11 @@ tidecv API notes (v1.0.1):
   fix_main_errors() returns ΔAP in [0, 100] scale; divide by 100 for [0,1].
 """
 import sys
+from pathlib import Path
 
-GT_PATH = "../../data/annotations/instances_val2017.json"
-DT_PATH = "../../data/bbox_val2017_results.json"
+_DATA = Path(__file__).resolve().parents[1] / "data"
+GT_PATH = str(_DATA / "annotations/instances_val2017.json")
+DT_PATH = str(_DATA / "bbox_val2017_results.json")
 
 # --- hotcoco ---
 from hotcoco import COCO, COCOeval

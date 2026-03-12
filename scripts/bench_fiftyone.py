@@ -1,11 +1,12 @@
 """Benchmark: FiftyOne default COCO eval vs hotcoco backend.
 
-Usage (from crates/hotcoco-pyo3/):
-    uv run python data/bench_fiftyone.py
+Usage:
+    uv run python scripts/bench_fiftyone.py
 """
 
 import json
 import time
+from pathlib import Path
 
 import fiftyone as fo
 
@@ -13,8 +14,9 @@ import fiftyone as fo
 # Load COCO data
 # ---------------------------------------------------------------------------
 
-GT_FILE = "../../data/annotations/instances_val2017.json"
-DT_FILE = "../../data/bbox_val2017_results.json"
+_DATA = Path(__file__).resolve().parents[1] / "data"
+GT_FILE = str(_DATA / "annotations/instances_val2017.json")
+DT_FILE = str(_DATA / "bbox_val2017_results.json")
 
 print("Loading COCO JSON data...")
 t0 = time.perf_counter()

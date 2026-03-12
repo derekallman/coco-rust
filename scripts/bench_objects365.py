@@ -5,8 +5,8 @@ from the ground truth annotations and writes them to a temp file for reuse.
 
 pycocotools is excluded (DNF at O365 scale — needs a beefier machine).
 
-Usage (from crates/hotcoco-pyo3/):
-    uv run python data/bench_objects365.py [--gt PATH] [--max-det N]
+Usage:
+    uv run python scripts/bench_objects365.py [--gt PATH] [--max-det N]
 
 Defaults:
     --gt      <workspace>/data/annotations/zhiyuan_objv2_val.json
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import psutil
 
-_WORKSPACE = Path(__file__).resolve().parents[3]
+_WORKSPACE = Path(__file__).resolve().parents[1]
 _DATA = _WORKSPACE / "data"
 _BIN_NAME = "coco-eval.exe" if sys.platform == "win32" else "coco-eval"
 RUST_BIN = str(_WORKSPACE / "target/release" / _BIN_NAME)

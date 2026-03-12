@@ -31,6 +31,7 @@ classifiers = [
 
 [project.optional-dependencies]
 dev = [
+    "maturin>=1.12.6",
     "pycocotools",
     "faster-coco-eval",
     "hypothesis",
@@ -58,3 +59,7 @@ coco = "hotcoco.cli:main"
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
+manifest-path = "crates/hotcoco-pyo3/Cargo.toml"
+
+[tool.uv]
+package = false

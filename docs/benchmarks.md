@@ -133,15 +133,15 @@ Keypoint metrics are exact.
 - **Wall clock time** includes file I/O, evaluation, and accumulation. Excludes Python import time.
 - **Detections are synthetic** — generated from GT annotations with a fixed seed (`seed=42`), so AP scores are meaningless but detection count and format are representative of real model output. Fixed seed means results are identical across runs.
 - **Only detections are scaled** for the 10x benchmark — ground truth annotations are unchanged.
-- Benchmark scripts are in the repository under `crates/hotcoco-pyo3/data/`.
+- Benchmark scripts are in `scripts/` at the repo root.
 
 ## Reproducing the benchmarks
 
-All benchmark scripts are in `crates/hotcoco-pyo3/data/`. You'll need the COCO val2017 annotation files and a working hotcoco build — see the [installation page](getting-started/installation.md) for setup. Then:
+You'll need the COCO val2017 annotation files and a working hotcoco build — see the [installation page](getting-started/installation.md) for setup. Then:
 
 ```bash
-uv run python data/bench.py              # speed benchmark (1x)
-uv run python data/bench.py --scale 10  # 10x stress test
-uv run python data/parity.py            # metric parity vs pycocotools
-uv run python data/bench_objects365.py  # O365 scale (requires O365 annotations)
+just bench                                        # speed benchmark (1x)
+uv run python scripts/bench.py --scale 10        # 10x stress test
+just parity                                       # metric parity vs pycocotools
+uv run python scripts/bench_objects365.py        # O365 scale (requires O365 annotations)
 ```

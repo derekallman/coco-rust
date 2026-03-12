@@ -22,10 +22,16 @@ hotcoco is a pure Rust port of [pycocotools](https://github.com/ppwwyyxx/cocoapi
 crates/hotcoco/      # Pure Rust library — types, mask ops, COCO API, evaluation
 crates/hotcoco-cli/  # CLI binary
 crates/hotcoco-pyo3/ # PyO3 Python bindings (cdylib, built with maturin)
+python/              # Python package source (hotcoco/__init__.py, cli.py, etc.)
+scripts/             # Dev scripts: parity.py, bench.py, test_parity.py, etc.
+scripts/fixtures/    # Adversarial test fixtures (adversarial/) and generated output
+data/                # Large COCO data files (gitignored — see installation docs)
+Justfile             # Task runner: just build / test / parity / bench / lint / fmt
 ```
 
 ### Key Architecture
 
+- Single root `pyproject.toml` acts as both maturin build config and Python package definition; `manifest-path = "crates/hotcoco-pyo3/Cargo.toml"` points maturin at the cdylib. `[tool.uv] package = false` means uv won't auto-build — always use `just build` explicitly.
 - `hotcoco-pyo3` uses `hotcoco-core` as the Cargo dependency alias for `hotcoco` to avoid name collision with the `hotcoco` Python module name
 - Python bindings return plain dicts (not wrapped Rust structs) matching pycocotools conventions
 - Mask operations handle numpy row-major <-> Rust column-major transposition in the PyO3 layer
@@ -42,9 +48,9 @@ All 12 COCO evaluation metrics (AP, AP50, AP75, APs, APm, APl, AR1, AR10, AR100,
 ### Verification Sequence (after any eval.rs change)
 
 ```bash
-cargo test                                                    # 1. All tests pass
-cd crates/hotcoco-pyo3 && uv run python data/parity.py       # 2. Parity vs pycocotools
-uv run python data/bench.py                                   # 3. (optional) speed check
+just parity          # build + parity vs pycocotools (bbox ≤1e-4, segm ≤2e-4, kpts exact)
+just test            # build + cargo test + pytest hypothesis suite
+just bench           # (optional) speed comparison
 ```
 
 Tolerances: bbox ≤1e-4, segm ≤2e-4, kpts exact.
@@ -59,7 +65,7 @@ Tolerances: bbox ≤1e-4, segm ≤2e-4, kpts exact.
 ## Testing
 
 - Run `cargo test` after any Rust code changes and verify all tests pass before committing.
-- For Python binding changes, run from `crates/hotcoco-pyo3/`: `uv run maturin develop --release && uv run python -c 'import hotcoco'` as a smoke test.
+- For Python binding changes: `just build` as a smoke test, then `just parity` to verify metrics.
 
 ## Skills
 
@@ -78,22 +84,26 @@ Custom skills for this project (invoke with `/skill-name`):
 ## Build Commands
 
 ```bash
+# Common workflows (use just from the repo root)
+just build       # Build Python extension (maturin develop --release)
+just test        # Build + cargo test + pytest
+just parity      # Build + parity check vs pycocotools
+just bench       # Build + benchmark
+just lint        # cargo clippy (warnings as errors)
+just fmt         # cargo fmt --all
+just fmt-check   # cargo fmt --all -- --check
+
+# Raw Rust commands (when just isn't needed)
 cargo build                    # Build all crates
 cargo test                     # Run all tests
 cargo test -p hotcoco          # Run library tests only
 cargo check -p hotcoco-pyo3    # Check pyo3 crate (can't link without Python)
-cargo clippy                   # Lint
-cargo fmt --all                # Format (use --all, not --workspace)
-cargo fmt --all -- --check     # Check formatting
 
-# Python bindings (run from crates/hotcoco-pyo3/)
-# One-time setup: cd crates/hotcoco-pyo3 && uv venv && uv pip install maturin ".[dev]"
-uv run maturin develop --release  # Build + install into .venv
+# One-time Python setup
+uv sync --all-extras           # Creates .venv at workspace root with all deps
 ```
 
-## Refactoring
-
-Use a task agent to find every file and line that references the old naming convention, then summarize what needs to change before making any edits.
+Note: `cargo build --workspace` will fail at link time for hotcoco-pyo3 (expected — cdylib needs Python). Use `just build` or `cargo check -p hotcoco-pyo3` instead.
 
 ## Documentation
 

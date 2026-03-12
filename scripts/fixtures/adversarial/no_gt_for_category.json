@@ -16,6 +16,11 @@
       "id": 1,
       "name": "cat_1",
       "supercategory": "thing"
+    },
+    {
+      "id": 2,
+      "name": "cat_2",
+      "supercategory": "thing"
     }
   ],
   "annotations": [
@@ -39,12 +44,23 @@
       "image_id": 1,
       "category_id": 1,
       "bbox": [
-        33.0,
         0.0,
-        100.0,
-        100.0
+        0.0,
+        80.0,
+        80.0
       ],
       "score": 0.9
+    },
+    {
+      "image_id": 1,
+      "category_id": 2,
+      "bbox": [
+        50.0,
+        50.0,
+        80.0,
+        80.0
+      ],
+      "score": 0.8
     }
   ]
 }

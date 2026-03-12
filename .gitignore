@@ -127,14 +127,12 @@ site/
 .claude/
 
 # Benchmark / annotation data (large files, not in repo)
-# Root-level data dir (large JSON + zip files)
 /data/
-# pyo3 data dir: ignore large files but track scripts and fixtures
-crates/hotcoco-pyo3/data/annotations/
-crates/hotcoco-pyo3/data/*.json
-crates/hotcoco-pyo3/data/__pycache__/
-# Adversarial harness output (generated, not committed)
-crates/hotcoco-pyo3/data/parity_failures/
+
+# Scripts dir — generated artifacts only
+scripts/__pycache__/
+scripts/fixtures/parity_failures/
+scripts/fixtures/.hypothesis/
 
 # uv lock file (transient dev env)
 crates/hotcoco-pyo3/uv.lock

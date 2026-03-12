@@ -4,8 +4,9 @@ Generates thousands of diverse COCO datasets using hypothesis, evaluates through
 both pycocotools and hotcoco, and compares all metrics to within 1e-10 tolerance.
 When discrepancies are found, hypothesis auto-minimizes to the smallest failing case.
 
-Usage (from crates/hotcoco-pyo3/):
-    uv run pytest data/test_parity.py -v -x --tb=short
+Usage:
+    uv run pytest scripts/test_parity.py -v -x --tb=short
+    just test
 """
 
 import contextlib
@@ -34,7 +35,7 @@ from hotcoco import COCOeval as RsCOCOeval
 
 TOLERANCE = 1e-10
 _DATA_DIR = Path(__file__).resolve().parent
-FAILURE_DIR = str(_DATA_DIR / "parity_failures")
+FAILURE_DIR = str(_DATA_DIR / "fixtures" / "parity_failures")
 
 COCO_KEYPOINT_NAMES = [
     "nose",
@@ -512,7 +513,7 @@ HYPOTHESIS_SETTINGS = dict(
     max_examples=3334,
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow],
-    database=DirectoryBasedExampleDatabase(str(_DATA_DIR / ".hypothesis")),
+    database=DirectoryBasedExampleDatabase(str(_DATA_DIR / "fixtures" / ".hypothesis")),
 )
 
 

@@ -7,10 +7,11 @@ See docs/getting-started/installation.md for download instructions.
 Wall clock time for all three evaluation types. Optional --scale flag
 multiplies detections to simulate higher load.
 
-Usage (from crates/hotcoco-pyo3/):
-    uv run python data/bench.py
-    uv run python data/bench.py --scale 10
-    uv run python data/bench.py --types bbox segm
+Usage:
+    uv run python scripts/bench.py
+    uv run python scripts/bench.py --scale 10
+    uv run python scripts/bench.py --types bbox segm
+    just bench
 """
 
 import argparse
@@ -30,7 +31,7 @@ from pycocotools.cocoeval import COCOeval as PyCOCOeval
 from faster_coco_eval import COCO as FcCOCO, COCOeval_faster
 from hotcoco import COCO, COCOeval
 
-WORKSPACE = Path(__file__).resolve().parents[3]
+WORKSPACE = Path(__file__).resolve().parents[1]
 DATA = WORKSPACE / "data"
 
 BENCHMARKS = [
