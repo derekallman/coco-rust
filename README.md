@@ -58,6 +58,7 @@ ev.run()
 - **TIDE error analysis** — breaks down every FP and FN into six error types so you know *why* your model falls short, not just by how much. See [TIDE errors](https://derekallman.github.io/hotcoco/guide/tide/).
 - **Confusion matrix** — cross-category matching with per-class breakdowns. See [confusion matrix](https://derekallman.github.io/hotcoco/guide/confusion-matrix/).
 - **F-scores** — F-beta averaging over precision/recall curves, analogous to mAP. See [F-scores](https://derekallman.github.io/hotcoco/guide/f-scores/).
+- **Plotting** — publication-quality PR curves, per-category AP, confusion matrices, and TIDE error breakdowns with one function call. `pip install hotcoco[plot]`. See [plotting](https://derekallman.github.io/hotcoco/guide/plotting/).
 - **Format conversion** — COCO ↔ YOLO in either direction, from Python or the CLI. See [format conversion](https://derekallman.github.io/hotcoco/guide/conversion/).
 - **PyTorch integrations** — `CocoDetection` and `CocoEvaluator` drop-in replacements for torchvision's detection classes; no torchvision or pycocotools dependency required. See [PyTorch integration](https://derekallman.github.io/hotcoco/integrations/).
 - **Experiment tracker integration** — `get_results(prefix="val/bbox", per_class=True)` returns a flat dict ready for W&B, MLflow, or any logger. See [logging metrics](https://derekallman.github.io/hotcoco/guide/logging/).

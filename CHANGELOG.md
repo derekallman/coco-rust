@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `hotcoco.plot` module — publication-quality matplotlib plots for evaluation results: `pr_curve`, `confusion_matrix`, `top_confusions`, `per_category_ap`, `tide_errors`
+- `styled=False` parameter on all plot functions — skips hotcoco visual theme for users who bring their own rcParams or seaborn/corporate styles
+- Bundled Inter font (Medium + Bold) in `python/hotcoco/_fonts/` for consistent typography across platforms
+- `plot` optional dependency group: `pip install hotcoco[plot]` (matplotlib >= 3.5)
+- `docs/guide/plotting.md` — user guide with examples for all 5 plot types, unstyled mode, and subplot composition
+- `docs/api/plot.md` — API reference for all plot functions and color palette constants
 - Shell completions for `coco-eval` (Rust) — `coco-eval --completions <bash|zsh|fish|elvish|powershell>` prints a completion script to stdout; powered by `clap_complete`
 - Shell completions for `coco` (Python) — `pip install "hotcoco[completions]"` enables tab completion via `argcomplete`; `# PYTHON_ARGCOMPLETE_OK` magic comment added to CLI entrypoint
 - `docs/getting-started/troubleshooting.md` — covers import conflicts with pycocotools, numpy version issues, detection format mistakes (XYXY vs XYWH, missing fields, unknown image IDs), RLE pitfalls, and all-`-1` metric diagnosis

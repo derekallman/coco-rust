@@ -19,6 +19,7 @@ nav = [
     { "Working with Results" = "guide/results.md" },
     { "Mask Operations" = "guide/masks.md" },
     { "PyTorch Integration" = "guide/pytorch.md" },
+    { "Plotting" = "guide/plotting.md" },
     { "Framework Integrations" = "guide/frameworks.md" },
   ] },
   { "API Reference" = [
@@ -26,6 +27,7 @@ nav = [
     { "COCOeval" = "api/cocoeval.md" },
     { "Params" = "api/params.md" },
     { "mask" = "api/mask.md" },
+    { "plot" = "api/plot.md" },
     { "PyTorch Integrations" = "api/integrations.md" },
     { "CLI" = "cli.md" },
   ] },

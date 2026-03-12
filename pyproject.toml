@@ -46,6 +46,9 @@ torch = [
 completions = [
     "argcomplete>=3.0",
 ]
+plot = [
+    "matplotlib>=3.5",
+]
 
 [project.urls]
 Homepage = "https://derekallman.github.io/hotcoco/"

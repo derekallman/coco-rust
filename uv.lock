@@ -603,6 +603,10 @@ dev = [
     { name = "pytest", version = "8.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pytest", version = "9.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
+plot = [
+    { name = "matplotlib", version = "3.9.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "matplotlib", version = "3.10.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+]
 torch = [
     { name = "pillow", version = "11.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "pillow", version = "12.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
@@ -616,6 +620,7 @@ requires-dist = [
     { name = "faster-coco-eval", marker = "extra == 'dev'" },
     { name = "hypothesis", marker = "extra == 'dev'" },
     { name = "lvis", marker = "extra == 'dev'", specifier = ">=0.5.3" },
+    { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.5" },
     { name = "maturin", marker = "extra == 'dev'", specifier = ">=1.12.6" },
     { name = "numpy", specifier = ">=1.22" },
     { name = "pillow", marker = "extra == 'torch'", specifier = ">=8.0" },
@@ -624,7 +629,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "torch", marker = "extra == 'torch'", specifier = ">=1.9" },
 ]
-provides-extras = ["dev", "torch", "completions"]
+provides-extras = ["dev", "torch", "completions", "plot"]
 
 [[package]]
 name = "hypothesis"
