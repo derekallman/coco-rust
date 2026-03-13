@@ -20,14 +20,12 @@ from pathlib import Path
 
 import hypothesis.strategies as st
 import pytest
-from hypothesis import HealthCheck, given, settings
-from hypothesis.database import DirectoryBasedExampleDatabase
-
-from pycocotools.coco import COCO as PyCOCO
-from pycocotools.cocoeval import COCOeval as PyCOCOeval
-
 from hotcoco import COCO as RsCOCO
 from hotcoco import COCOeval as RsCOCOeval
+from hypothesis import HealthCheck, given, settings
+from hypothesis.database import DirectoryBasedExampleDatabase
+from pycocotools.coco import COCO as PyCOCO
+from pycocotools.cocoeval import COCOeval as PyCOCOeval
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -157,9 +155,7 @@ def coco_categories(draw, iou_type="bbox"):
             }
         ]
     n = draw(st.integers(min_value=1, max_value=5))
-    return [
-        {"id": i + 1, "name": f"cat_{i + 1}", "supercategory": "none"} for i in range(n)
-    ]
+    return [{"id": i + 1, "name": f"cat_{i + 1}", "supercategory": "none"} for i in range(n)]
 
 
 @st.composite
@@ -204,12 +200,8 @@ def coco_bbox(draw, w, h):
         target_area = float(kind.split("_")[1])
         side = target_area**0.5
         if side <= min(w, h):
-            x = round(
-                draw(st.floats(min_value=0, max_value=max(0, float(w) - side))), 2
-            )
-            y = round(
-                draw(st.floats(min_value=0, max_value=max(0, float(h) - side))), 2
-            )
+            x = round(draw(st.floats(min_value=0, max_value=max(0, float(w) - side))), 2)
+            y = round(draw(st.floats(min_value=0, max_value=max(0, float(h) - side))), 2)
             return [x, y, round(side, 2), round(side, 2)]
         # fallthrough to normal
     # normal
@@ -250,11 +242,7 @@ def coco_keypoints(draw, w, h):
 
 def _score_strategy():
     """Score with edge-case bias toward 0.0 and 1.0."""
-    return st.one_of(
-        st.just(0.0),
-        st.just(1.0),
-        st.floats(min_value=0.0, max_value=1.0).map(lambda x: round(x, 4)),
-    )
+    return st.one_of(st.just(0.0), st.just(1.0), st.floats(min_value=0.0, max_value=1.0).map(lambda x: round(x, 4)))
 
 
 @st.composite
@@ -310,12 +298,7 @@ def detection(draw, images, categories, iou_type):
     bbox = draw(coco_bbox(w, h))
     score = draw(_score_strategy())
 
-    det = {
-        "image_id": img["id"],
-        "category_id": cat["id"],
-        "bbox": bbox,
-        "score": score,
-    }
+    det = {"image_id": img["id"], "category_id": cat["id"], "bbox": bbox, "score": score}
 
     if iou_type == "keypoints":
         kpts, num_vis = draw(coco_keypoints(w, h))
@@ -338,11 +321,7 @@ def coco_eval_data(draw, iou_type):
         ann = draw(gt_annotation(i + 1, images, categories, iou_type))
         annotations.append(ann)
 
-    gt_dataset = {
-        "images": images,
-        "annotations": annotations,
-        "categories": categories,
-    }
+    gt_dataset = {"images": images, "annotations": annotations, "categories": categories}
 
     # 1-50 detections
     n_dt = draw(st.integers(min_value=1, max_value=50))
@@ -394,45 +373,15 @@ def run_both(gt_dataset, dt_results, iou_type):
         os.unlink(dt_file.name)
 
 
-def assert_metrics_match(
-    py_stats, rs_stats, iou_type, gt_dataset=None, dt_results=None
-):
+def assert_metrics_match(py_stats, rs_stats, iou_type, gt_dataset=None, dt_results=None):
     """Assert all metrics match within tolerance."""
     expected_len = 10 if iou_type == "keypoints" else 12
-    assert len(py_stats) == expected_len, (
-        f"pycocotools returned {len(py_stats)} metrics, expected {expected_len}"
-    )
-    assert len(rs_stats) == expected_len, (
-        f"hotcoco returned {len(rs_stats)} metrics, expected {expected_len}"
-    )
+    assert len(py_stats) == expected_len, f"pycocotools returned {len(py_stats)} metrics, expected {expected_len}"
+    assert len(rs_stats) == expected_len, f"hotcoco returned {len(rs_stats)} metrics, expected {expected_len}"
 
-    metric_names = [
-        "AP",
-        "AP50",
-        "AP75",
-        "APs",
-        "APm",
-        "APl",
-        "AR1",
-        "AR10",
-        "AR100",
-        "ARs",
-        "ARm",
-        "ARl",
-    ]
+    metric_names = ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"]
     if iou_type == "keypoints":
-        metric_names = [
-            "AP",
-            "AP50",
-            "AP75",
-            "APm",
-            "APl",
-            "AR1",
-            "AR10",
-            "AR100",
-            "ARm",
-            "ARl",
-        ]
+        metric_names = ["AP", "AP50", "AP75", "APm", "APl", "AR1", "AR10", "AR100", "ARm", "ARl"]
 
     mismatches = []
     for i in range(expected_len):
@@ -442,16 +391,12 @@ def assert_metrics_match(
             continue
         diff = abs(py_val - rs_val)
         if diff > TOLERANCE:
-            mismatches.append(
-                f"  [{i}] {metric_names[i]}: py={py_val:.15f} rs={rs_val:.15f} diff={diff:.2e}"
-            )
+            mismatches.append(f"  [{i}] {metric_names[i]}: py={py_val:.15f} rs={rs_val:.15f} diff={diff:.2e}")
 
     if mismatches:
         if gt_dataset is not None and dt_results is not None:
             save_failure(gt_dataset, dt_results, iou_type, py_stats, rs_stats)
-        msg = f"\n{iou_type} metric mismatch (tol={TOLERANCE}):\n" + "\n".join(
-            mismatches
-        )
+        msg = f"\n{iou_type} metric mismatch (tol={TOLERANCE}):\n" + "\n".join(mismatches)
         raise AssertionError(msg)
 
 
@@ -466,33 +411,9 @@ def save_failure(gt_dataset, dt_results, iou_type, py_stats, rs_stats):
     with open(f"{prefix}_dt.json", "w") as f:
         json.dump(dt_results, f, indent=2)
 
-    metric_names = [
-        "AP",
-        "AP50",
-        "AP75",
-        "APs",
-        "APm",
-        "APl",
-        "AR1",
-        "AR10",
-        "AR100",
-        "ARs",
-        "ARm",
-        "ARl",
-    ]
+    metric_names = ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"]
     if iou_type == "keypoints":
-        metric_names = [
-            "AP",
-            "AP50",
-            "AP75",
-            "APm",
-            "APl",
-            "AR1",
-            "AR10",
-            "AR100",
-            "ARm",
-            "ARl",
-        ]
+        metric_names = ["AP", "AP50", "AP75", "APm", "APl", "AR1", "AR10", "AR100", "ARm", "ARl"]
 
     with open(f"{prefix}_stats.txt", "w") as f:
         f.write(f"iou_type: {iou_type}\n")
@@ -500,9 +421,7 @@ def save_failure(gt_dataset, dt_results, iou_type, py_stats, rs_stats):
         f.write("-" * 65 + "\n")
         for i in range(len(py_stats)):
             diff = abs(py_stats[i] - rs_stats[i])
-            f.write(
-                f"{metric_names[i]:<8} {py_stats[i]:>20.15f} {rs_stats[i]:>20.15f} {diff:>12.2e}\n"
-            )
+            f.write(f"{metric_names[i]:<8} {py_stats[i]:>20.15f} {rs_stats[i]:>20.15f} {diff:>12.2e}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -599,9 +518,7 @@ def test_empty_gt():
         py_stats, rs_stats = run_both(gt, dts, iou_type)
         assert_metrics_match(py_stats, rs_stats, iou_type)
         # All AP metrics should be -1 when no GT exists
-        assert all(s == -1.0 for s in py_stats[:6]), (
-            f"Expected -1.0 AP metrics, got {py_stats[:6]}"
-        )
+        assert all(s == -1.0 for s in py_stats[:6]), f"Expected -1.0 AP metrics, got {py_stats[:6]}"
 
 
 def test_all_crowd():
@@ -611,10 +528,7 @@ def test_all_crowd():
         _make_bbox_ann(2, bbox=[200, 200, 50, 50], iscrowd=1),
     ]
     gt = _make_minimal_gt("bbox", annotations=anns)
-    dts = [
-        _make_bbox_det(bbox=[10, 10, 100, 100], score=0.9),
-        _make_bbox_det(bbox=[200, 200, 50, 50], score=0.5),
-    ]
+    dts = [_make_bbox_det(bbox=[10, 10, 100, 100], score=0.9), _make_bbox_det(bbox=[200, 200, 50, 50], score=0.5)]
     py_stats, rs_stats = run_both(gt, dts, "bbox")
     assert_metrics_match(py_stats, rs_stats, "bbox")
 
@@ -675,12 +589,7 @@ def test_many_detections_few_gt():
     """Many detections for a single GT — tests maxDet handling."""
     anns = [_make_bbox_ann(1, bbox=[100.0, 100.0, 50.0, 50.0])]
     gt = _make_minimal_gt("bbox", annotations=anns)
-    dts = [
-        _make_bbox_det(
-            bbox=[100.0 + i * 2, 100.0, 50.0, 50.0], score=round(1.0 - i * 0.005, 4)
-        )
-        for i in range(200)
-    ]
+    dts = [_make_bbox_det(bbox=[100.0 + i * 2, 100.0, 50.0, 50.0], score=round(1.0 - i * 0.005, 4)) for i in range(200)]
     py_stats, rs_stats = run_both(gt, dts, "bbox")
     assert_metrics_match(py_stats, rs_stats, "bbox")
 
@@ -715,15 +624,7 @@ def test_kpt_no_visible():
         },
     ]
     gt = _make_minimal_gt("keypoints", annotations=anns)
-    dts = [
-        {
-            "image_id": 1,
-            "category_id": 1,
-            "bbox": [50.0, 50.0, 200.0, 200.0],
-            "score": 0.9,
-            "keypoints": kpts_some,
-        }
-    ]
+    dts = [{"image_id": 1, "category_id": 1, "bbox": [50.0, 50.0, 200.0, 200.0], "score": 0.9, "keypoints": kpts_some}]
     py_stats, rs_stats = run_both(gt, dts, "keypoints")
     assert_metrics_match(py_stats, rs_stats, "keypoints")
 

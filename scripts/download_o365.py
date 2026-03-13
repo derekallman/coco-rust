@@ -21,7 +21,6 @@ except ImportError:
     sys.exit("polars not installed — run: uv pip install polars")
 
 
-
 HF_REPO = "jxu124/objects365"
 SPLIT = "validation"
 OUT_DEFAULT = "data/annotations/zhiyuan_objv2_val.json"
@@ -30,11 +29,7 @@ OUT_DEFAULT = "data/annotations/zhiyuan_objv2_val.json"
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--out", default=OUT_DEFAULT, help="Output COCO JSON path")
-    p.add_argument(
-        "--cache-dir",
-        default=None,
-        help="HuggingFace cache dir (default: ~/.cache/huggingface)",
-    )
+    p.add_argument("--cache-dir", default=None, help="HuggingFace cache dir (default: ~/.cache/huggingface)")
     return p.parse_args()
 
 
@@ -72,10 +67,7 @@ def build_coco_json(parquet_paths: list[Path]) -> dict:
     # ── Images ──────────────────────────────────────────────────────────────
     # image_info is a struct column: {file_name, height, id, license, url, width}
     img_df = (
-        df.select("image_info")
-        .unnest("image_info")
-        .select(["id", "file_name", "width", "height"])
-        .rename({"id": "id"})
+        df.select("image_info").unnest("image_info").select(["id", "file_name", "width", "height"]).rename({"id": "id"})
     )
     images = img_df.to_dicts()
     print(f"  Images: {len(images):,}")
@@ -97,9 +89,7 @@ def build_coco_json(parquet_paths: list[Path]) -> dict:
             w=pl.col("bbox").list.get(2) - pl.col("bbox").list.get(0),
             h=pl.col("bbox").list.get(3) - pl.col("bbox").list.get(1),
         )
-        .map_elements(
-            lambda s: [s["x"], s["y"], s["w"], s["h"]], return_dtype=pl.List(pl.Float64)
-        )
+        .map_elements(lambda s: [s["x"], s["y"], s["w"], s["h"]], return_dtype=pl.List(pl.Float64))
         .alias("bbox")
     )
 
@@ -121,10 +111,7 @@ def build_coco_json(parquet_paths: list[Path]) -> dict:
         .unique()
         .sort("category_id")
     )
-    categories = [
-        {"id": row["category_id"], "name": row["category"], "supercategory": ""}
-        for row in cat_df.to_dicts()
-    ]
+    categories = [{"id": row["category_id"], "name": row["category"], "supercategory": ""} for row in cat_df.to_dicts()]
     print(f"  Categories: {len(categories)}")
 
     return {
@@ -156,7 +143,7 @@ def main():
     size_mb = out_path.stat().st_size / 1_048_576
     print(f"Done — {size_mb:.1f} MB")
     print()
-    print(f"Run benchmark with:")
+    print("Run benchmark with:")
     print(f"  uv run python scripts/bench_objects365.py --gt {out_path}")
 
 

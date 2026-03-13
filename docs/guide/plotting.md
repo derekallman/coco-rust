@@ -136,18 +136,49 @@ fig, ax = tide_errors(ev.tide_errors())
 Shows the six TIDE error types (Cls, Loc, Both, Dupe, Bkg, Miss)
 as horizontal bars with their delta-AP values.
 
-## Bring your own style
+## Themes
 
-Every function accepts `styled=False` to skip hotcoco's visual theme
-and return a plain matplotlib figure. This is useful when you want to
-apply your own rcParams, seaborn theme, or corporate style guide:
+Every plot function accepts a `theme` argument:
+
+| Theme | Description |
+|-------|-------------|
+| `"warm-slate"` | Default. Warm off-white background, terracotta + slate palette. |
+| `"scientific-blue"` | Cool/academic. Blue-grey background, navy + red anchor colors. |
+| `"ember"` | Warm/editorial. Parchment background, rust + copper + amber palette. |
 
 ```python
+fig, ax = pr_curve(ev, theme="scientific-blue")
+fig, ax = per_category_ap(results, theme="ember")
+```
+
+Add `paper_mode=True` to force white backgrounds — useful when embedding in LaTeX or PowerPoint:
+
+```python
+fig, ax = pr_curve(ev, theme="scientific-blue", paper_mode=True, save_path="pr.pdf")
+```
+
+To apply a theme to your own matplotlib code, use the `style()` context manager:
+
+```python
+from hotcoco.plot import style
 import matplotlib.pyplot as plt
+
+with style(theme="warm-slate", paper_mode=True):
+    fig, ax = plt.subplots()
+    ax.plot(recall, precision)
+    fig.savefig("custom.pdf")
+```
+
+To use a completely different style (seaborn, corporate rcParams, etc.), simply don't call
+hotcoco plot functions inside a `style()` context — the default matplotlib style applies:
+
+```python
 import seaborn as sns
+import matplotlib.pyplot as plt
 
 sns.set_theme()
-fig, ax = pr_curve(ev, styled=False)
+fig, ax = plt.subplots()
+# your own plotting code here
 ```
 
 ## Composing plots

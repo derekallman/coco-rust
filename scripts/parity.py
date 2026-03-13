@@ -19,10 +19,9 @@ import os
 import sys
 from pathlib import Path
 
+from hotcoco import COCO, COCOeval
 from pycocotools.coco import COCO as PyCOCO
 from pycocotools.cocoeval import COCOeval as PyCOCOeval
-
-from hotcoco import COCO, COCOeval
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 DATA = WORKSPACE / "data"
@@ -34,8 +33,7 @@ BENCHMARKS = [
         "dt": DATA / "bbox_val2017_results.json",
         "iou_type": "bbox",
         "tol": 1e-4,
-        "metric_names": ["AP", "AP50", "AP75", "APs", "APm", "APl",
-                         "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"],
+        "metric_names": ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"],
     },
     {
         "name": "segm",
@@ -43,8 +41,7 @@ BENCHMARKS = [
         "dt": DATA / "segm_val2017_results.json",
         "iou_type": "segm",
         "tol": 2e-4,
-        "metric_names": ["AP", "AP50", "AP75", "APs", "APm", "APl",
-                         "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"],
+        "metric_names": ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"],
     },
     {
         "name": "keypoints",
@@ -52,8 +49,7 @@ BENCHMARKS = [
         "dt": DATA / "kpt_val2017_results.json",
         "iou_type": "keypoints",
         "tol": 1e-10,
-        "metric_names": ["AP", "AP50", "AP75", "APm", "APl",
-                         "AR1", "AR10", "AR100", "ARm", "ARl"],
+        "metric_names": ["AP", "AP50", "AP75", "APm", "APl", "AR1", "AR10", "AR100", "ARm", "ARl"],
     },
 ]
 

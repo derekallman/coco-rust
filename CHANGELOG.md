@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `hotcoco.plot.report()` — single-page PDF evaluation report: run context block, mode-aware metrics table (correct rows for bbox/segm, keypoints, and LVIS), PR curves at IoU 0.50/0.75/mean, F1 peak tile, and per-category AP chart; "hotcoco" brand mark in header
 - `coco report` CLI subcommand — runs evaluation and saves a PDF report; flags: `--gt`, `--dt`, `-o`, `--iou-type`, `--lvis`, `--title`; requires `pip install hotcoco[plot]`
 - `hotcoco.plot` module — publication-quality matplotlib plots for evaluation results: `pr_curve`, `confusion_matrix`, `top_confusions`, `per_category_ap`, `tide_errors`
-- `styled=False` parameter on all plot functions — skips hotcoco visual theme for users who bring their own rcParams or seaborn/corporate styles
+- `theme` and `paper_mode` parameters on all plot functions — `theme` selects one of three built-in palettes (`"warm-slate"`, `"scientific-blue"`, `"ember"`); `paper_mode=True` forces white figure/axes backgrounds for LaTeX or PowerPoint embedding
+- `hotcoco.plot.style(theme, paper_mode)` context manager — apply any theme to custom matplotlib code outside of hotcoco plot functions
 - Bundled Inter font (Medium + Bold) in `python/hotcoco/_fonts/` for consistent typography across platforms
 - `plot` optional dependency group: `pip install hotcoco[plot]` (matplotlib >= 3.5)
 - `docs/guide/plotting.md` — user guide with examples for all 5 plot types, unstyled mode, and subplot composition

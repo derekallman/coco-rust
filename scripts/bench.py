@@ -26,30 +26,19 @@ import time
 from pathlib import Path
 
 import pycocotools.mask as mask_utils
+from faster_coco_eval import COCO as FcCOCO
+from faster_coco_eval import COCOeval_faster
+from hotcoco import COCO, COCOeval
 from pycocotools.coco import COCO as PyCOCO
 from pycocotools.cocoeval import COCOeval as PyCOCOeval
-from faster_coco_eval import COCO as FcCOCO, COCOeval_faster
-from hotcoco import COCO, COCOeval
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 DATA = WORKSPACE / "data"
 
 BENCHMARKS = [
-    {
-        "name": "bbox",
-        "gt": DATA / "annotations/instances_val2017.json",
-        "iou_type": "bbox",
-    },
-    {
-        "name": "segm",
-        "gt": DATA / "annotations/instances_val2017.json",
-        "iou_type": "segm",
-    },
-    {
-        "name": "keypoints",
-        "gt": DATA / "annotations/person_keypoints_val2017.json",
-        "iou_type": "keypoints",
-    },
+    {"name": "bbox", "gt": DATA / "annotations/instances_val2017.json", "iou_type": "bbox"},
+    {"name": "segm", "gt": DATA / "annotations/instances_val2017.json", "iou_type": "segm"},
+    {"name": "keypoints", "gt": DATA / "annotations/person_keypoints_val2017.json", "iou_type": "keypoints"},
 ]
 
 # ~1 detection per GT annotation in val2017 instances (~36,781 annotations).
@@ -161,14 +150,21 @@ def bench_hotcoco(gt_file, dt_file, iou_type):
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--scale", type=int, default=1, metavar="N",
-                   help=f"Multiply baseline detection count ({BASE_DETS:,}) by N (default: 1)")
-    p.add_argument("--types", nargs="+",
-                   choices=["bbox", "segm", "keypoints"],
-                   default=["bbox", "segm", "keypoints"],
-                   help="Eval types to run (default: all three)")
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument(
+        "--scale",
+        type=int,
+        default=1,
+        metavar="N",
+        help=f"Multiply baseline detection count ({BASE_DETS:,}) by N (default: 1)",
+    )
+    p.add_argument(
+        "--types",
+        nargs="+",
+        choices=["bbox", "segm", "keypoints"],
+        default=["bbox", "segm", "keypoints"],
+        help="Eval types to run (default: all three)",
+    )
     return p.parse_args()
 
 
@@ -196,9 +192,7 @@ def main():
 
             fc_x = py_t / fc_t
             hc_x = py_t / hc_t
-            print(f"  {bench['name']:<12} {py_t:>11.2f}s"
-                  f"  {fc_t:>6.2f}s ({fc_x:.1f}×)"
-                  f"  {hc_t:>6.2f}s ({hc_x:.1f}×)")
+            print(f"  {bench['name']:<12} {py_t:>11.2f}s  {fc_t:>6.2f}s ({fc_x:.1f}×)  {hc_t:>6.2f}s ({hc_x:.1f}×)")
 
     print("=" * 68)
     print("  Speedups are relative to pycocotools.")

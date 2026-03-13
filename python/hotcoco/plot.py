@@ -24,53 +24,130 @@ from typing import Any
 # Palette
 # ---------------------------------------------------------------------------
 
-SERIES_COLORS = [
-    "#5C7080",  # warm slate
-    "#C46B50",  # terracotta
-    "#2B7A8C",  # deep teal
-    "#C9943E",  # warm gold
-    "#8A5A90",  # plum
-    "#5B7F63",  # sage
-    "#3A7CA5",  # ocean
-    "#B07650",  # copper
-]
+# ---------------------------------------------------------------------------
+# Themes
+# ---------------------------------------------------------------------------
 
-CHROME = {
-    "text": "#2C2420",
-    "label": "#4A3F38",
-    "tick": "#5E544C",
-    "grid": "#E8E2DA",
-    "spine": "#D4CCC2",
-    "background": "#FAF7F4",
-    "plot_bg": "#FDF9F6",
+_THEMES: dict[str, dict] = {
+    "warm-slate": {
+        "series": ["#5C7080", "#C46B50", "#2B7A8C", "#C9943E", "#8A5A90", "#5B7F63", "#3A7CA5", "#B07650"],
+        "chrome": {
+            "text": "#2C2420", "label": "#4A3F38", "tick": "#7A6E64",
+            "grid": "#E8E2DA", "spine": "#D4CCC2",
+        },
+        "background": "#FAF7F4",
+        "plot_bg": "#ffffff",
+        "sequential": ["#FAF7F4", "#C9943E", "#C46B50", "#5C2E1E"],
+        "cmap": "hotcoco_seq",
+    },
+    "scientific-blue": {
+        "series": ["#1B4F8A", "#E84855", "#2E86AB", "#F4A261", "#457B9D", "#74C69D"],
+        "chrome": {
+            "text": "#1A2B3C", "label": "#2E3F52", "tick": "#6B7B8E",
+            "grid": "#DDE4EF", "spine": "#C0CCE0",
+        },
+        "background": "#F2F5F9",
+        "plot_bg": "#ffffff",
+        "sequential": ["#F2F5F9", "#2E86AB", "#1B4F8A", "#0D2240"],
+        "cmap": "hotcoco_sci",
+    },
+    "ember": {
+        "series": ["#BF4E30", "#F2C14E", "#D4915E", "#2D3A3A", "#6B4C3B", "#E8D5B0"],
+        "chrome": {
+            "text": "#2D3A3A", "label": "#4A3520", "tick": "#8B7355",
+            "grid": "#E6D9C5", "spine": "#D4C4A8",
+        },
+        "background": "#F5EFE6",
+        "plot_bg": "#FFFDF8",
+        "sequential": ["#F5EFE6", "#D4915E", "#BF4E30", "#6B2210"],
+        "cmap": "hotcoco_ember",
+    },
 }
 
-SEQUENTIAL = ["#FAF7F4", "#C9943E", "#C46B50", "#5C2E1E"]
+_CMAPS_REGISTERED: set[str] = set()
+
+
+def _get_theme(name: str) -> dict:
+    if name not in _THEMES:
+        raise ValueError(f"Unknown theme {name!r}. Choose from: {list(_THEMES)}")
+    return _THEMES[name]
+
+
+def _ensure_cmap(theme: dict) -> None:
+    from matplotlib.colors import LinearSegmentedColormap
+
+    import matplotlib
+
+    cmap_name = theme["cmap"]
+    if cmap_name not in _CMAPS_REGISTERED:
+        cmap = LinearSegmentedColormap.from_list(cmap_name, theme["sequential"])
+        try:
+            matplotlib.colormaps.register(cmap)
+        except ValueError:
+            pass
+        _CMAPS_REGISTERED.add(cmap_name)
+
+
+def _build_rc(theme_name: str = "warm-slate", paper_mode: bool = False) -> dict:
+    from cycler import cycler
+
+    t = _get_theme(theme_name)
+    _ensure_cmap(t)
+    bg = "#ffffff" if paper_mode else t["background"]
+    plot_bg = "#ffffff" if paper_mode else t["plot_bg"]
+    c = t["chrome"]
+    return {
+        "figure.facecolor": bg,
+        "axes.facecolor": plot_bg,
+        "axes.edgecolor": c["spine"],
+        "axes.linewidth": 0.75,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.color": c["grid"],
+        "grid.linewidth": 0.8,
+        "axes.axisbelow": True,
+        "axes.prop_cycle": cycler(color=t["series"]),
+        "xtick.color": c["tick"],
+        "ytick.color": c["tick"],
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "xtick.direction": "out",
+        "ytick.direction": "out",
+        "xtick.major.size": 4,
+        "ytick.major.size": 4,
+        "xtick.major.width": 0.75,
+        "ytick.major.width": 0.75,
+        "axes.labelcolor": c["label"],
+        "axes.labelsize": 11,
+        "axes.labelpad": 8,
+        "text.color": c["text"],
+        "font.family": _resolve_font_family(),
+        "legend.frameon": False,
+        "image.cmap": t["cmap"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Public palette constants (warm-slate defaults, kept for backwards compat)
+# ---------------------------------------------------------------------------
+
+SERIES_COLORS: list[str] = _THEMES["warm-slate"]["series"]
+CHROME: dict[str, str] = {**_THEMES["warm-slate"]["chrome"], "background": _THEMES["warm-slate"]["background"], "plot_bg": _THEMES["warm-slate"]["plot_bg"]}
+SEQUENTIAL: list[str] = _THEMES["warm-slate"]["sequential"]
 
 # ---------------------------------------------------------------------------
 # Matplotlib lazy import + colormap registration
 # ---------------------------------------------------------------------------
 
 _MPL_ERROR = "matplotlib is required for plotting. Install with: pip install hotcoco[plot]"
-_COLORMAP_REGISTERED = False
 
 
 def _import_mpl():
-    global _COLORMAP_REGISTERED
     try:
         import matplotlib
         import matplotlib.pyplot as plt
         from matplotlib import font_manager
-
-        if not _COLORMAP_REGISTERED:
-            from matplotlib.colors import LinearSegmentedColormap
-
-            cmap = LinearSegmentedColormap.from_list("hotcoco_seq", SEQUENTIAL)
-            try:
-                matplotlib.colormaps.register(cmap)
-            except ValueError:
-                pass
-            _COLORMAP_REGISTERED = True
 
         return matplotlib, plt, font_manager
     except ImportError:
@@ -107,55 +184,30 @@ def _resolve_font_family() -> list[str]:
 
 
 @contextmanager
-def style():
-    """Context manager that applies the hotcoco matplotlib style.
+def style(theme: str = "warm-slate", paper_mode: bool = False):
+    """Context manager that applies a hotcoco matplotlib theme.
+
+    Parameters
+    ----------
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        Set both figure and axes background to white. Useful for LaTeX
+        inclusion or any context where the background must be pure white.
 
     Usage::
 
         with hotcoco.plot.style():
             fig, ax = pr_curve(ev)
-            fig.savefig("pr.png")
 
-    Outside the context, all plot functions work with plain matplotlib
-    defaults. Apply your own ``rcParams`` or ``plt.style.use()`` for custom
-    themes.
+        with hotcoco.plot.style(theme="scientific-blue", paper_mode=True):
+            fig, ax = pr_curve(ev)
+
+    All plot functions also accept ``theme`` and ``paper_mode`` directly,
+    which is equivalent and more concise for single calls.
     """
-    from cycler import cycler
-
     mpl, _, _ = _import_mpl()
-
-    rc = {
-        "figure.facecolor": CHROME["background"],
-        "axes.facecolor": CHROME["plot_bg"],
-        "axes.edgecolor": CHROME["spine"],
-        "axes.linewidth": 0.75,
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        "axes.grid": True,
-        "grid.color": CHROME["grid"],
-        "grid.linewidth": 0.8,
-        "axes.axisbelow": True,
-        "axes.prop_cycle": cycler(color=SERIES_COLORS),
-        "xtick.color": CHROME["tick"],
-        "ytick.color": CHROME["tick"],
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9,
-        "xtick.direction": "out",
-        "ytick.direction": "out",
-        "xtick.major.size": 4,
-        "ytick.major.size": 4,
-        "xtick.major.width": 0.75,
-        "ytick.major.width": 0.75,
-        "axes.labelcolor": CHROME["label"],
-        "axes.labelsize": 11,
-        "axes.labelpad": 8,
-        "text.color": CHROME["text"],
-        "font.family": _resolve_font_family(),
-        "legend.frameon": False,
-        "image.cmap": "hotcoco_seq",
-    }
-
-    with mpl.rc_context(rc):
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
         yield
 
 
@@ -267,6 +319,8 @@ def pr_curve_iou_sweep(
     iou_thrs: list[float] | None = None,
     area_rng: str = "all",
     max_det: int | None = None,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
     ax=None,
     save_path: str | Path | None = None,
 ) -> tuple:
@@ -285,6 +339,10 @@ def pr_curve_iou_sweep(
         Area range label. Default ``"all"``.
     max_det : int, optional
         Max detections. Default: last entry in ``params.max_dets``.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
     save_path : str or Path, optional
 
@@ -294,7 +352,7 @@ def pr_curve_iou_sweep(
     """
     import numpy as np
 
-    _import_mpl()
+    mpl, _, _ = _import_mpl()
     precision, all_iou_thrs, _, a_idx, m_idx, recall_pts = _resolve_pr_params(coco_eval, area_rng, max_det)
 
     t_indices = (
@@ -303,20 +361,21 @@ def pr_curve_iou_sweep(
         else [i for i, t in enumerate(all_iou_thrs) if t in iou_thrs]
     )
 
-    fig, ax = _new_figure((6, 6), ax)
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        fig, ax = _new_figure((6, 6), ax)
 
-    for line_idx, t_idx in enumerate(t_indices):
-        p = precision[t_idx, :, :, a_idx, m_idx].copy()
-        p[p < 0] = np.nan
-        prec = np.nanmean(p, axis=1)
-        lw = 2 if line_idx == 0 else 1
-        (line,) = ax.plot(recall_pts, prec, linewidth=lw, label=f"IoU={all_iou_thrs[t_idx]:.2f}")
-        if line_idx == 0:
-            _annotate_f1_peak(ax, recall_pts, prec, line)
+        for line_idx, t_idx in enumerate(t_indices):
+            p = precision[t_idx, :, :, a_idx, m_idx].copy()
+            p[p < 0] = np.nan
+            prec = np.nanmean(p, axis=1)
+            lw = 2 if line_idx == 0 else 1
+            (line,) = ax.plot(recall_pts, prec, linewidth=lw, label=f"IoU={all_iou_thrs[t_idx]:.2f}")
+            if line_idx == 0:
+                _annotate_f1_peak(ax, recall_pts, prec, line)
 
-    ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
-    ax.legend(fontsize=9, loc="lower left")
-    _configure_axes(ax, "Precision-Recall", subtitle="mean over categories", value_axis="y")
+        ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
+        ax.legend(fontsize=9, loc="lower left")
+        _configure_axes(ax, "Precision-Recall", subtitle="mean over categories", value_axis="y")
     return _save_and_return(fig, ax, save_path)
 
 
@@ -327,6 +386,8 @@ def pr_curve_by_category(
     iou_thr: float = 0.5,
     area_rng: str = "all",
     max_det: int | None = None,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
     ax=None,
     save_path: str | Path | None = None,
 ) -> tuple:
@@ -344,6 +405,10 @@ def pr_curve_by_category(
         Area range label. Default ``"all"``.
     max_det : int, optional
         Max detections. Default: last entry in ``params.max_dets``.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
     save_path : str or Path, optional
 
@@ -353,7 +418,7 @@ def pr_curve_by_category(
     """
     import numpy as np
 
-    _import_mpl()
+    mpl, _, _ = _import_mpl()
     precision, all_iou_thrs, all_cat_ids, a_idx, m_idx, recall_pts = _resolve_pr_params(coco_eval, area_rng, max_det)
 
     if cat_id not in all_cat_ids:
@@ -365,12 +430,13 @@ def pr_curve_by_category(
     prec = np.where(prec < 0, np.nan, prec)
     cat_name = _cat_name_lookup(coco_eval).get(cat_id, str(cat_id))
 
-    fig, ax = _new_figure((6, 6), ax)
-    (line,) = ax.plot(recall_pts, prec, linewidth=2)
-    _annotate_f1_peak(ax, recall_pts, prec, line)
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        fig, ax = _new_figure((6, 6), ax)
+        (line,) = ax.plot(recall_pts, prec, linewidth=2)
+        _annotate_f1_peak(ax, recall_pts, prec, line)
 
-    ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
-    _configure_axes(ax, "Precision-Recall", subtitle=cat_name, value_axis="y")
+        ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
+        _configure_axes(ax, "Precision-Recall", subtitle=cat_name, value_axis="y")
     return _save_and_return(fig, ax, save_path)
 
 
@@ -382,6 +448,8 @@ def pr_curve_top_n(
     iou_thr: float = 0.5,
     area_rng: str = "all",
     max_det: int | None = None,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
     ax=None,
     save_path: str | Path | None = None,
 ) -> tuple:
@@ -401,6 +469,10 @@ def pr_curve_top_n(
         Area range label. Default ``"all"``.
     max_det : int, optional
         Max detections. Default: last entry in ``params.max_dets``.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
     save_path : str or Path, optional
 
@@ -410,7 +482,7 @@ def pr_curve_top_n(
     """
     import numpy as np
 
-    _import_mpl()
+    mpl, _, _ = _import_mpl()
     precision, all_iou_thrs, all_cat_ids, a_idx, m_idx, recall_pts = _resolve_pr_params(coco_eval, area_rng, max_det)
     t_idx = _nearest_iou_idx(all_iou_thrs, iou_thr)
     name_map = _cat_name_lookup(coco_eval)
@@ -425,24 +497,26 @@ def pr_curve_top_n(
         cat_ids = [cid for cid, _ in cat_aps[:top_n]]
 
     cat_id_to_k = {cid: k for k, cid in enumerate(all_cat_ids)}
-    fig, ax = _new_figure((6, 6), ax)
 
-    for cid in cat_ids:
-        k_idx = cat_id_to_k.get(cid)
-        if k_idx is None:
-            continue
-        prec = precision[t_idx, :, k_idx, a_idx, m_idx]
-        prec = np.where(prec < 0, np.nan, prec)
-        ax.plot(recall_pts, prec, linewidth=1.5, label=name_map.get(cid, str(cid)))
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        fig, ax = _new_figure((6, 6), ax)
 
-    ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
-    ax.legend(fontsize=8, loc="lower left")
-    _configure_axes(ax, "Precision-Recall by Category", subtitle=f"IoU={all_iou_thrs[t_idx]:.2f}", value_axis="y")
+        for cid in cat_ids:
+            k_idx = cat_id_to_k.get(cid)
+            if k_idx is None:
+                continue
+            prec = precision[t_idx, :, k_idx, a_idx, m_idx]
+            prec = np.where(prec < 0, np.nan, prec)
+            ax.plot(recall_pts, prec, linewidth=1.5, label=name_map.get(cid, str(cid)))
+
+        ax.set(xlim=(0, 1), ylim=(0, 1), aspect="equal", xlabel="Recall", ylabel="Precision")
+        ax.legend(fontsize=8, loc="lower left")
+        _configure_axes(ax, "Precision-Recall by Category", subtitle=f"IoU={all_iou_thrs[t_idx]:.2f}", value_axis="y")
     return _save_and_return(fig, ax, save_path)
 
 
 def pr_curve(coco_eval, *, iou_thrs=None, cat_id=None, cat_ids=None, iou_thr=None, top_n=10,
-             area_rng="all", max_det=None, ax=None, save_path=None):
+             area_rng="all", max_det=None, theme="warm-slate", paper_mode=False, ax=None, save_path=None):
     """Dispatch to the appropriate named function.
 
     Prefer calling directly: ``pr_curve_iou_sweep``, ``pr_curve_by_category``,
@@ -450,12 +524,14 @@ def pr_curve(coco_eval, *, iou_thrs=None, cat_id=None, cat_ids=None, iou_thr=Non
     """
     if cat_id is not None:
         return pr_curve_by_category(coco_eval, cat_id, iou_thr=iou_thr or 0.5,
-                                    area_rng=area_rng, max_det=max_det, ax=ax, save_path=save_path)
+                                    area_rng=area_rng, max_det=max_det, theme=theme, paper_mode=paper_mode,
+                                    ax=ax, save_path=save_path)
     if cat_ids is not None or iou_thr is not None:
         return pr_curve_top_n(coco_eval, cat_ids=cat_ids, top_n=top_n, iou_thr=iou_thr or 0.5,
-                              area_rng=area_rng, max_det=max_det, ax=ax, save_path=save_path)
+                              area_rng=area_rng, max_det=max_det, theme=theme, paper_mode=paper_mode,
+                              ax=ax, save_path=save_path)
     return pr_curve_iou_sweep(coco_eval, iou_thrs=iou_thrs, area_rng=area_rng,
-                              max_det=max_det, ax=ax, save_path=save_path)
+                              max_det=max_det, theme=theme, paper_mode=paper_mode, ax=ax, save_path=save_path)
 
 
 def confusion_matrix(
@@ -465,6 +541,8 @@ def confusion_matrix(
     top_n: int | None = None,
     group_by: str | None = None,
     cat_groups: dict[str, list[str]] | None = None,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
     ax=None,
     save_path: str | Path | None = None,
 ) -> tuple:
@@ -484,6 +562,10 @@ def confusion_matrix(
         Requires ``cat_groups`` mapping.
     cat_groups : dict[str, list[str]], optional
         Mapping of group name to list of category names for ``group_by``.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
         Existing axes to draw on.
     save_path : str or Path, optional
@@ -558,36 +640,39 @@ def confusion_matrix(
 
     n = len(labels)
     size = min(max(6, 0.35 * n), 20)
-    fig, ax = _new_figure((size, size), ax)
+    rc = _build_rc(theme, paper_mode)
+    with mpl.rc_context(rc):
+        fig, ax = _new_figure((size, size), ax)
 
-    im = ax.imshow(data, aspect="equal")  # cmap from rcParams (hotcoco_seq when in style())
+        im = ax.imshow(data, aspect="equal")  # cmap from active rcParams
 
-    thresh = data.max() / 2.0
-    suppress = 0.01 if normalize else 1
-    for i in range(n):
-        for j in range(n):
-            val = data[i, j]
-            if val < suppress:
-                continue
-            color = "white" if val > thresh else mpl.rcParams["text.color"]
-            text = f"{val:.2f}" if normalize else f"{int(val)}"
-            ax.text(j, i, text, ha="center", va="center", color=color, fontsize=max(5, min(9, 100 / n)))
+        thresh = data.max() / 2.0
+        suppress = 0.01 if normalize else 1
+        for i in range(n):
+            for j in range(n):
+                val = data[i, j]
+                if val < suppress:
+                    continue
+                color = "white" if val > thresh else mpl.rcParams["text.color"]
+                text = f"{val:.2f}" if normalize else f"{int(val)}"
+                ax.text(j, i, text, ha="center", va="center", color=color, fontsize=max(5, min(9, 100 / n)))
 
-    ax.set_xticks(range(n))
-    ax.set_yticks(range(n))
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_yticklabels(labels)
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Ground truth")
-    ax.set_frame_on(False)
-    _configure_axes(ax, "Confusion Matrix", value_axis=None)
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
+        ax.set_xticklabels(labels, rotation=45, ha="right")
+        ax.set_yticklabels(labels)
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Ground truth")
+        ax.set_frame_on(False)
+        _configure_axes(ax, "Confusion Matrix", value_axis=None)
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
     return _save_and_return(fig, ax, save_path)
 
 
 def top_confusions(
-    cm_dict: dict[str, Any], *, top_n: int = 20, ax=None, save_path: str | Path | None = None
+    cm_dict: dict[str, Any], *, top_n: int = 20, theme: str = "warm-slate", paper_mode: bool = False,
+    ax=None, save_path: str | Path | None = None
 ) -> tuple:
     """Plot the top N most common misclassifications as horizontal bars.
 
@@ -601,6 +686,10 @@ def top_confusions(
         Output of ``coco_eval.confusion_matrix()``.
     top_n : int
         Number of top confusions to show. Default 20.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
         Existing axes to draw on.
     save_path : str or Path, optional
@@ -612,7 +701,7 @@ def top_confusions(
     """
     import numpy as np
 
-    _import_mpl()
+    mpl, _, _ = _import_mpl()
 
     matrix = np.asarray(cm_dict["matrix"], dtype=int)
     cat_names = list(cm_dict["cat_names"])
@@ -631,25 +720,26 @@ def top_confusions(
     pairs.sort(key=lambda x: x[2], reverse=True)
     pairs = pairs[:top_n]
 
-    if not pairs:
-        fig, ax = _new_figure((8, 3), ax)
-        ax.text(0.5, 0.5, "No confusions found", ha="center", va="center", fontsize=12, transform=ax.transAxes)
-        _configure_axes(ax, "Top Confusions", value_axis=None)
-        return _save_and_return(fig, ax, save_path)
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        if not pairs:
+            fig, ax = _new_figure((8, 3), ax)
+            ax.text(0.5, 0.5, "No confusions found", ha="center", va="center", fontsize=12, transform=ax.transAxes)
+            _configure_axes(ax, "Top Confusions", value_axis=None)
+            return _save_and_return(fig, ax, save_path)
 
-    bar_labels = [f"{gt} \u2192 {pred}" for gt, pred, _ in pairs]
-    counts = [c for _, _, c in pairs]
-    num_bars = len(bar_labels)
+        bar_labels = [f"{gt} \u2192 {pred}" for gt, pred, _ in pairs]
+        counts = [c for _, _, c in pairs]
+        num_bars = len(bar_labels)
 
-    fig, ax = _new_figure((8, max(4, 0.35 * num_bars)), ax)
-    bars = ax.barh(range(num_bars), counts, height=0.7)
-    _annotate_bars(ax, bars, counts, fmt="d", fontsize=8)
+        fig, ax = _new_figure((8, max(4, 0.35 * num_bars)), ax)
+        bars = ax.barh(range(num_bars), counts, height=0.7)
+        _annotate_bars(ax, bars, counts, fmt="d", fontsize=8)
 
-    ax.set_yticks(range(num_bars))
-    ax.set_yticklabels(bar_labels)
-    ax.invert_yaxis()
-    ax.set_xlabel("Count")
-    _configure_axes(ax, "Top Confusions", subtitle="ground truth \u2192 prediction", value_axis="x")
+        ax.set_yticks(range(num_bars))
+        ax.set_yticklabels(bar_labels)
+        ax.invert_yaxis()
+        ax.set_xlabel("Count")
+        _configure_axes(ax, "Top Confusions", subtitle="ground truth \u2192 prediction", value_axis="x")
 
     return _save_and_return(fig, ax, save_path)
 
@@ -659,6 +749,8 @@ def per_category_ap(
     *,
     top_n: int = 20,
     bottom_n: int = 5,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
     ax=None,
     save_path: str | Path | None = None,
 ) -> tuple:
@@ -672,6 +764,10 @@ def per_category_ap(
         Number of top categories to show.
     bottom_n : int
         Number of bottom categories to show.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
         Existing axes to draw on.
     save_path : str or Path, optional
@@ -696,35 +792,37 @@ def per_category_ap(
     values = [x[1] if x[1] is not None else 0 for x in items]
     num_bars = len(names)
 
-    fig, ax = _new_figure((8, max(4, 0.3 * num_bars)), ax)
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        fig, ax = _new_figure((8, max(4, 0.3 * num_bars)), ax)
 
-    # "..." separator gets a muted color to signal a break in ranking
-    bar_color = next(iter(mpl.rcParams["axes.prop_cycle"]))["color"]
-    sep_color = mpl.rcParams.get("grid.color", "#cccccc")
-    colors = [sep_color if n == "..." else bar_color for n in names]
-    bars = ax.barh(range(num_bars), values, height=0.7, color=colors)
+        # "..." separator gets a muted color to signal a break in ranking
+        bar_color = next(iter(mpl.rcParams["axes.prop_cycle"]))["color"]
+        sep_color = mpl.rcParams.get("grid.color", "#cccccc")
+        colors = [sep_color if n == "..." else bar_color for n in names]
+        bars = ax.barh(range(num_bars), values, height=0.7, color=colors)
 
-    label_bars = [(b, v) for b, v, n in zip(bars, values, names) if n != "..."]
-    if label_bars:
-        bs, vs = zip(*label_bars)
-        _annotate_bars(ax, bs, vs, fmt=".2f", fontsize=7.5)
+        label_bars = [(b, v) for b, v, n in zip(bars, values, names) if n != "..."]
+        if label_bars:
+            bs, vs = zip(*label_bars)
+            _annotate_bars(ax, bs, vs, fmt=".2f", fontsize=7.5)
 
-    real_values = [v for n, v in zip(names, values) if n != "..."]
-    mean_ap = sum(real_values) / len(real_values) if real_values else 0
-    ax.axvline(mean_ap, linestyle="--", linewidth=1, label=f"Mean AP: {mean_ap:.3f}")
+        real_values = [v for n, v in zip(names, values) if n != "..."]
+        mean_ap = sum(real_values) / len(real_values) if real_values else 0
+        ax.axvline(mean_ap, linestyle="--", linewidth=1, label=f"Mean AP: {mean_ap:.3f}")
 
-    ax.set_yticks(range(num_bars))
-    ax.set_yticklabels(names)
-    ax.invert_yaxis()
-    ax.set_xlabel("AP")
-    ax.legend(fontsize=9, loc="lower right")
-    _configure_axes(ax, "Per-Category AP", value_axis="x")
+        ax.set_yticks(range(num_bars))
+        ax.set_yticklabels(names)
+        ax.invert_yaxis()
+        ax.set_xlabel("AP")
+        ax.legend(fontsize=9, loc="lower right")
+        _configure_axes(ax, "Per-Category AP", value_axis="x")
 
     return _save_and_return(fig, ax, save_path)
 
 
 def tide_errors(
-    tide_dict: dict[str, Any], *, ax=None, save_path: str | Path | None = None
+    tide_dict: dict[str, Any], *, theme: str = "warm-slate", paper_mode: bool = False,
+    ax=None, save_path: str | Path | None = None
 ) -> tuple:
     """Plot TIDE error breakdown as horizontal bars.
 
@@ -732,6 +830,10 @@ def tide_errors(
     ----------
     tide_dict : dict
         Output of ``coco_eval.tide_errors()``.
+    theme : str
+        ``"warm-slate"`` (default), ``"scientific-blue"``, or ``"ember"``.
+    paper_mode : bool
+        White figure and axes background for PDF/LaTeX inclusion.
     ax : matplotlib.axes.Axes, optional
         Existing axes to draw on.
     save_path : str or Path, optional
@@ -741,7 +843,7 @@ def tide_errors(
     -------
     (Figure, Axes)
     """
-    _import_mpl()
+    mpl, _, _ = _import_mpl()
 
     delta_ap = tide_dict["delta_ap"]
     ap_base = tide_dict["ap_base"]
@@ -749,15 +851,16 @@ def tide_errors(
     error_types = ["Cls", "Loc", "Both", "Dupe", "Bkg", "Miss"]
     values = [delta_ap.get(e, 0.0) for e in error_types]
 
-    fig, ax = _new_figure((8, 4), ax)
-    bars = ax.barh(range(len(error_types)), values, height=0.6)
-    _annotate_bars(ax, bars, values, fmt=".3f", fontsize=9)
+    with mpl.rc_context(_build_rc(theme, paper_mode)):
+        fig, ax = _new_figure((8, 4), ax)
+        bars = ax.barh(range(len(error_types)), values, height=0.6)
+        _annotate_bars(ax, bars, values, fmt=".3f", fontsize=9)
 
-    ax.set_yticks(range(len(error_types)))
-    ax.set_yticklabels(error_types)
-    ax.invert_yaxis()
-    ax.set_xlabel("\u0394AP")
-    _configure_axes(ax, "TIDE Error Breakdown", subtitle=f"baseline AP={ap_base:.3f}", value_axis="x")
+        ax.set_yticks(range(len(error_types)))
+        ax.set_yticklabels(error_types)
+        ax.invert_yaxis()
+        ax.set_xlabel("\u0394AP")
+        _configure_axes(ax, "TIDE Error Breakdown", subtitle=f"baseline AP={ap_base:.3f}", value_axis="x")
 
     return _save_and_return(fig, ax, save_path)
 

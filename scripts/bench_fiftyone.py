@@ -25,8 +25,10 @@ with open(GT_FILE) as f:
 with open(DT_FILE) as f:
     dt_data = json.load(f)
 print(f"  Loaded in {time.perf_counter() - t0:.2f}s")
-print(f"  Images: {len(gt_data['images'])}, GT anns: {len(gt_data['annotations'])}, "
-      f"Detections: {len(dt_data)}, Categories: {len(gt_data['categories'])}")
+print(
+    f"  Images: {len(gt_data['images'])}, GT anns: {len(gt_data['annotations'])}, "
+    f"Detections: {len(dt_data)}, Categories: {len(gt_data['categories'])}"
+)
 
 # ---------------------------------------------------------------------------
 # Build FiftyOne dataset
@@ -59,21 +61,23 @@ for img_id, img_info in img_map.items():
     gt_dets = []
     for ann in gt_by_img.get(img_id, []):
         x, y, w, h = ann["bbox"]
-        gt_dets.append(fo.Detection(
-            label=cat_map[ann["category_id"]],
-            bounding_box=[x / W, y / H, w / W, h / H],
-            iscrowd=bool(ann.get("iscrowd", 0)),
-        ))
+        gt_dets.append(
+            fo.Detection(
+                label=cat_map[ann["category_id"]],
+                bounding_box=[x / W, y / H, w / W, h / H],
+                iscrowd=bool(ann.get("iscrowd", 0)),
+            )
+        )
     sample["ground_truth"] = fo.Detections(detections=gt_dets)
 
     pred_dets = []
     for det in dt_by_img.get(img_id, []):
         x, y, w, h = det["bbox"]
-        pred_dets.append(fo.Detection(
-            label=cat_map[det["category_id"]],
-            bounding_box=[x / W, y / H, w / W, h / H],
-            confidence=det["score"],
-        ))
+        pred_dets.append(
+            fo.Detection(
+                label=cat_map[det["category_id"]], bounding_box=[x / W, y / H, w / W, h / H], confidence=det["score"]
+            )
+        )
     sample["predictions"] = fo.Detections(detections=pred_dets)
 
     samples.append(sample)
@@ -89,16 +93,13 @@ print("\n" + "=" * 60)
 print("hotcoco backend (compute_mAP=True)")
 print("=" * 60)
 
-from hotcoco.fiftyone import init_as_fiftyone
+from hotcoco.fiftyone import init_as_fiftyone  # noqa: E402
+
 init_as_fiftyone()
 
 t0 = time.perf_counter()
 results_hotcoco = dataset.evaluate_detections(
-    "predictions",
-    gt_field="ground_truth",
-    eval_key="eval_hotcoco",
-    method="hotcoco",
-    compute_mAP=True,
+    "predictions", gt_field="ground_truth", eval_key="eval_hotcoco", method="hotcoco", compute_mAP=True
 )
 t_hotcoco = time.perf_counter() - t0
 
@@ -120,11 +121,7 @@ print("=" * 60)
 
 t0 = time.perf_counter()
 results_default = dataset.evaluate_detections(
-    "predictions",
-    gt_field="ground_truth",
-    eval_key="eval_default",
-    method="coco",
-    compute_mAP=True,
+    "predictions", gt_field="ground_truth", eval_key="eval_default", method="coco", compute_mAP=True
 )
 t_default = time.perf_counter() - t0
 

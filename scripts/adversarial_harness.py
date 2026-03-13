@@ -27,8 +27,7 @@ from pathlib import Path
 
 import numpy as np
 
-METRIC_NAMES = ["AP", "AP50", "AP75", "APs", "APm", "APl",
-                "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"]
+METRIC_NAMES = ["AP", "AP50", "AP75", "APs", "APm", "APl", "AR1", "AR10", "AR100", "ARs", "ARm", "ARl"]
 
 # IoU thresholds used by COCO eval (np.linspace(0.5, 0.95, 10))
 IOU_THRS = np.linspace(0.5, 0.95, 10).round(2).tolist()
@@ -40,6 +39,7 @@ BOUNDARY_EPS = 1e-6
 # ---------------------------------------------------------------------------
 # Load fixture — split GT and DT, write GT to a temp file
 # ---------------------------------------------------------------------------
+
 
 def load_fixture(fixture_path):
     """
@@ -62,6 +62,7 @@ def load_fixture(fixture_path):
 # Run both tools
 # ---------------------------------------------------------------------------
 
+
 def _write_tmp_json(data):
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
     json.dump(data, tmp)
@@ -71,6 +72,7 @@ def _write_tmp_json(data):
 
 def run_hotcoco(gt_path, detections, iou_type):
     import hotcoco as hc
+
     gt = hc.COCO(gt_path)
     dt_tmp = _write_tmp_json(detections)
     try:
@@ -88,6 +90,7 @@ def run_hotcoco(gt_path, detections, iou_type):
 def run_pycocotools(gt_path, detections, iou_type):
     from pycocotools.coco import COCO
     from pycocotools.cocoeval import COCOeval
+
     gt = COCO(gt_path)
     dt = gt.loadRes(detections) if detections else gt.loadRes([])
     ev = COCOeval(gt, dt, iou_type)
@@ -100,6 +103,7 @@ def run_pycocotools(gt_path, detections, iou_type):
 # ---------------------------------------------------------------------------
 # Level 1: metric comparison
 # ---------------------------------------------------------------------------
+
 
 def compare_metrics(hc_ev, py_ev, threshold):
     """Return dict of metric_name → (hc_val, py_val, diff) for diffs > threshold."""
@@ -118,6 +122,7 @@ def compare_metrics(hc_ev, py_ev, threshold):
 # ---------------------------------------------------------------------------
 # Level 2: eval_imgs comparison
 # ---------------------------------------------------------------------------
+
 
 def _index_eval_imgs(eval_imgs):
     """Build (image_id, category_id, aRng_tuple) → entry dict."""
@@ -151,17 +156,13 @@ def _check_pair(key, hc_ei, py_ei):
     # Check the DT/GT sets are the same — if not, something is very wrong upstream
     if set(hc_dt_ids) != set(py_dt_ids):
         issues.append(
-            f"    DT ID sets differ:\n"
-            f"      hotcoco={sorted(hc_dt_ids)}\n"
-            f"      pycocotools={sorted(py_dt_ids)}"
+            f"    DT ID sets differ:\n      hotcoco={sorted(hc_dt_ids)}\n      pycocotools={sorted(py_dt_ids)}"
         )
         return issues  # can't align further
 
     if set(hc_gt_ids) != set(py_gt_ids):
         issues.append(
-            f"    GT ID sets differ:\n"
-            f"      hotcoco={sorted(hc_gt_ids)}\n"
-            f"      pycocotools={sorted(py_gt_ids)}"
+            f"    GT ID sets differ:\n      hotcoco={sorted(hc_gt_ids)}\n      pycocotools={sorted(py_gt_ids)}"
         )
         return issues
 
@@ -175,10 +176,10 @@ def _check_pair(key, hc_ei, py_ei):
     gt_ids = sorted(set(hc_gt_ids))
 
     # dtMatches: (T, D) — matched GT ID or 0
-    hc_dtm = _to_array(hc_ei["dtMatches"])   # hotcoco
-    py_dtm = _to_array(py_ei["dtMatches"])   # pycocotools
-    hc_dti = _to_array(hc_ei["dtIgnore"])    # (T, D) bool
-    py_dti = _to_array(py_ei["dtIgnore"])    # (T, D) bool
+    hc_dtm = _to_array(hc_ei["dtMatches"])  # hotcoco
+    py_dtm = _to_array(py_ei["dtMatches"])  # pycocotools
+    hc_dti = _to_array(hc_ei["dtIgnore"])  # (T, D) bool
+    py_dti = _to_array(py_ei["dtIgnore"])  # (T, D) bool
 
     # gtIgnore: (G,) bool
     hc_gti = _to_array(hc_ei["gtIgnore"])
@@ -191,10 +192,7 @@ def _check_pair(key, hc_ei, py_ei):
         hc_v = bool(hc_gti[hi])
         py_v = bool(py_gti[pi])
         if hc_v != py_v:
-            issues.append(
-                f"    GT ann_id={gt_id}: gtIgnore "
-                f"hotcoco={hc_v}, pycocotools={py_v}"
-            )
+            issues.append(f"    GT ann_id={gt_id}: gtIgnore hotcoco={hc_v}, pycocotools={py_v}")
 
     # --- dtIgnore and dtMatches divergence, per IoU threshold ---
     for t_idx, thr in enumerate(IOU_THRS):
@@ -211,27 +209,21 @@ def _check_pair(key, hc_ei, py_ei):
 
             # Match divergence: one matched, other didn't (or matched different GT)
             if hc_match != py_match:
-                note = _boundary_note(hc_ei, py_ei, hc_dt_idx, py_dt_idx,
-                                       hc_gt_idx, py_gt_idx, dt_id, gt_ids, thr)
+                note = _boundary_note(hc_ei, py_ei, hc_dt_idx, py_dt_idx, hc_gt_idx, py_gt_idx, dt_id, gt_ids, thr)
                 issues.append(
                     f"    IoU@{thr:.2f} DT ann_id={dt_id}: "
                     f"matched GT hotcoco={hc_match or 'none'}, "
-                    f"pycocotools={py_match or 'none'}"
-                    + (f"  [{note}]" if note else "")
+                    f"pycocotools={py_match or 'none'}" + (f"  [{note}]" if note else "")
                 )
 
             # dtIgnore divergence
             if hc_ign != py_ign:
-                issues.append(
-                    f"    IoU@{thr:.2f} DT ann_id={dt_id}: "
-                    f"dtIgnore hotcoco={hc_ign}, pycocotools={py_ign}"
-                )
+                issues.append(f"    IoU@{thr:.2f} DT ann_id={dt_id}: dtIgnore hotcoco={hc_ign}, pycocotools={py_ign}")
 
     return issues
 
 
-def _boundary_note(hc_ei, py_ei, hc_dt_idx, py_dt_idx,
-                   hc_gt_idx, py_gt_idx, dt_id, gt_ids, thr):
+def _boundary_note(hc_ei, py_ei, hc_dt_idx, py_dt_idx, hc_gt_idx, py_gt_idx, dt_id, gt_ids, thr):
     """
     If the disagreement is on a DT whose best IoU is within BOUNDARY_EPS of the
     threshold, flag it as potential float jitter rather than a real bug.
@@ -269,30 +261,33 @@ def compare_eval_imgs(hc_ev, py_ev):
         in_py = key in py_idx
 
         if in_hc and not in_py:
-            divergences.append({
-                "image_id": image_id, "category_id": category_id, "aRng": aRng,
-                "issues": ["    pair present in hotcoco but missing from pycocotools"]
-            })
+            divergences.append(
+                {
+                    "image_id": image_id,
+                    "category_id": category_id,
+                    "aRng": aRng,
+                    "issues": ["    pair present in hotcoco but missing from pycocotools"],
+                }
+            )
             continue
 
         if in_py and not in_hc:
             py_ei = py_idx[key]
             # Only flag if it's non-trivial (has DTs or GTs)
             if py_ei and (py_ei.get("dtIds") or py_ei.get("gtIds")):
-                divergences.append({
-                    "image_id": image_id, "category_id": category_id, "aRng": aRng,
-                    "issues": ["    pair present in pycocotools but missing from hotcoco"]
-                })
+                divergences.append(
+                    {
+                        "image_id": image_id,
+                        "category_id": category_id,
+                        "aRng": aRng,
+                        "issues": ["    pair present in pycocotools but missing from hotcoco"],
+                    }
+                )
             continue
 
         issues = _check_pair(key, hc_idx[key], py_idx[key])
         if issues:
-            divergences.append({
-                "image_id": image_id,
-                "category_id": category_id,
-                "aRng": list(aRng),
-                "issues": issues
-            })
+            divergences.append({"image_id": image_id, "category_id": category_id, "aRng": list(aRng), "issues": issues})
 
     return divergences
 
@@ -300,6 +295,7 @@ def compare_eval_imgs(hc_ev, py_ev):
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+
 
 def print_metric_failures(failures):
     print("\n[LEVEL 1] METRIC DIVERGENCES:")
@@ -327,17 +323,16 @@ def print_eval_img_divergences(divergences, limit=20):
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("fixture", help="Path to fixture JSON")
-    ap.add_argument("--iou-type", default="bbox",
-                    choices=["bbox", "segm", "keypoints"])
-    ap.add_argument("--metric-thr", type=float, default=1e-4,
-                    help="Metric diff threshold to flag (default 1e-4; use 2e-4 for segm)")
-    ap.add_argument("--eval-imgs-only", action="store_true",
-                    help="Skip metric check; always run eval_imgs comparison")
-    ap.add_argument("--max-divergences", type=int, default=20,
-                    help="Max eval_img pairs to print")
+    ap.add_argument("--iou-type", default="bbox", choices=["bbox", "segm", "keypoints"])
+    ap.add_argument(
+        "--metric-thr", type=float, default=1e-4, help="Metric diff threshold to flag (default 1e-4; use 2e-4 for segm)"
+    )
+    ap.add_argument("--eval-imgs-only", action="store_true", help="Skip metric check; always run eval_imgs comparison")
+    ap.add_argument("--max-divergences", type=int, default=20, help="Max eval_img pairs to print")
     args = ap.parse_args()
 
     fixture_path = args.fixture

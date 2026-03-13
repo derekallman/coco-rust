@@ -38,6 +38,7 @@ dev = [
     "lvis>=0.5.3",
     "psutil",
     "pytest",
+    "ruff>=0.4",
 ]
 torch = [
     "torch>=1.9",
@@ -63,6 +64,21 @@ coco = "hotcoco.cli:main"
 features = ["pyo3/extension-module"]
 python-source = "python"
 manifest-path = "crates/hotcoco-pyo3/Cargo.toml"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["external/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = false
+
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = true
 
 [tool.uv]
 package = false

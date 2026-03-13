@@ -10,7 +10,8 @@ All functions share these common parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `styled` | `bool` | Apply hotcoco visual style. Default `True`. Set `False` for plain matplotlib. |
+| `theme` | `str` | Visual theme: `"warm-slate"` (default), `"scientific-blue"`, or `"ember"`. |
+| `paper_mode` | `bool` | Set both figure and axes background to white. Useful for LaTeX / PowerPoint. Default `False`. |
 | `ax` | <code>Axes &#124; None</code> | Draw on an existing axes. If `None`, creates a new figure. |
 | `save_path` | <code>str &#124; Path &#124; None</code> | Save figure to this path (150 DPI). |
 
@@ -25,7 +26,7 @@ pr_curve(
     coco_eval, *,
     iou_thrs=None, cat_id=None, cat_ids=None,
     iou_thr=None, top_n=10, area_rng="all", max_det=None,
-    styled=True, ax=None, save_path=None,
+    theme="warm-slate", paper_mode=False, ax=None, save_path=None,
 )
 ```
 
@@ -55,7 +56,7 @@ confusion_matrix(
     cm_dict, *,
     normalize=True, top_n=None,
     group_by=None, cat_groups=None,
-    styled=True, ax=None, save_path=None,
+    theme="warm-slate", paper_mode=False, ax=None, save_path=None,
 )
 ```
 
@@ -77,7 +78,7 @@ Plot a confusion matrix heatmap.
 top_confusions(
     cm_dict, *,
     top_n=20,
-    styled=True, ax=None, save_path=None,
+    theme="warm-slate", paper_mode=False, ax=None, save_path=None,
 )
 ```
 
@@ -96,7 +97,7 @@ Plot the top N misclassifications as horizontal bars. Shows "ground truth → pr
 per_category_ap(
     results_dict, *,
     top_n=20, bottom_n=5,
-    styled=True, ax=None, save_path=None,
+    theme="warm-slate", paper_mode=False, ax=None, save_path=None,
 )
 ```
 
@@ -115,7 +116,7 @@ Plot per-category AP as horizontal bars with a mean AP reference line.
 ```python
 tide_errors(
     tide_dict, *,
-    styled=True, ax=None, save_path=None,
+    theme="warm-slate", paper_mode=False, ax=None, save_path=None,
 )
 ```
 
@@ -168,9 +169,40 @@ Returns `None`. Raises on I/O error or if `run()` was not called first.
 
 ---
 
+## Themes
+
+Three built-in themes:
+
+| Theme | Character |
+|-------|-----------|
+| `"warm-slate"` | Default. Warm off-white background, terracotta + slate series colors. |
+| `"scientific-blue"` | Cool/academic. Light blue-grey background, navy + red anchor colors. |
+| `"ember"` | Warm/editorial. Parchment background, rust + copper + amber palette. |
+
+Pass `paper_mode=True` to set figure and axes backgrounds to white, keeping all other theme colors intact. Useful when embedding plots in LaTeX documents or PowerPoint slides.
+
+```python
+# Academic paper
+fig, ax = pr_curve(ev, theme="scientific-blue", paper_mode=True, save_path="pr.pdf")
+
+# Warm editorial style
+fig, ax = per_category_ap(results, theme="ember", save_path="ap.png")
+```
+
+Use the `style()` context manager to apply a theme to your own matplotlib code:
+
+```python
+from hotcoco.plot import style
+
+with style(theme="scientific-blue", paper_mode=True):
+    fig, ax = plt.subplots()
+    ax.plot(recall, precision)
+    fig.savefig("custom.pdf")
+```
+
 ## Color palette
 
-The styled theme uses these constants, available for custom plots:
+The `warm-slate` theme constants are available for custom plots:
 
 ```python
 from hotcoco.plot import SERIES_COLORS, CHROME, SEQUENTIAL

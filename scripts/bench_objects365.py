@@ -35,21 +35,10 @@ RUST_BIN = str(_WORKSPACE / "target/release" / _BIN_NAME)
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--gt",
-        default=str(_DATA / "annotations/zhiyuan_objv2_val.json"),
-        help="Path to Objects365 val annotation JSON",
+        "--gt", default=str(_DATA / "annotations/zhiyuan_objv2_val.json"), help="Path to Objects365 val annotation JSON"
     )
-    p.add_argument(
-        "--max-det",
-        type=int,
-        default=100,
-        help="Max synthesized detections per image (default: 100)",
-    )
-    p.add_argument(
-        "--dt",
-        default=None,
-        help="Pre-generated detections JSON (skip generation if provided)",
-    )
+    p.add_argument("--max-det", type=int, default=100, help="Max synthesized detections per image (default: 100)")
+    p.add_argument("--dt", default=None, help="Pre-generated detections JSON (skip generation if provided)")
     return p.parse_args()
 
 
@@ -89,10 +78,7 @@ def generate_detections(gt_path, max_det_per_image, out_path):
                 }
             )
 
-    print(
-        f"Generated {len(results):,} detections across {len(by_image):,} images "
-        f"(cap={max_det_per_image}/image)"
-    )
+    print(f"Generated {len(results):,} detections across {len(by_image):,} images (cap={max_det_per_image}/image)")
     with open(out_path, "w") as f:
         json.dump(results, f)
     print(f"Saved detections to {out_path}")
@@ -168,7 +154,6 @@ ev.summarize()
 
 
 def _bench_python_runner(script, gt_file, dt_file, label):
-    import tempfile
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(script)
@@ -176,10 +161,7 @@ def _bench_python_runner(script, gt_file, dt_file, label):
 
     try:
         proc = subprocess.Popen(
-            [sys.executable, runner, gt_file, dt_file],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            [sys.executable, runner, gt_file, dt_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
         )
 
         peak_result = [0, 0]
@@ -309,8 +291,14 @@ def main():
     print(f"{'Library':<20} {'Time':>8}  {'Peak RAM':>9}  {'Committed':>9}  {'Speedup':>9}")
     print("-" * 80)
     print(f"{'pycocotools':<20} {fmt_time(pc_time)}  {fmt_mem(pc_phys)}  {fmt_mem(pc_commit)}  {'baseline':>9}")
-    print(f"{'faster-coco-eval':<20} {fmt_time(fc_time)}  {fmt_mem(fc_phys)}  {fmt_mem(fc_commit)}  {fmt_speedup(pc_time, fc_time):>9}")
-    print(f"{'hotcoco':<20} {fmt_time(hc_time)}  {fmt_mem(hc_phys)}  {fmt_mem(hc_commit)}  {fmt_speedup(pc_time, hc_time):>9}")
+    print(
+        f"{'faster-coco-eval':<20} {fmt_time(fc_time)}  {fmt_mem(fc_phys)}"
+        f"  {fmt_mem(fc_commit)}  {fmt_speedup(pc_time, fc_time):>9}"
+    )
+    print(
+        f"{'hotcoco':<20} {fmt_time(hc_time)}  {fmt_mem(hc_phys)}"
+        f"  {fmt_mem(hc_commit)}  {fmt_speedup(pc_time, hc_time):>9}"
+    )
     print("=" * 80)
     if sys.platform == "win32":
         print("Peak RAM = peak working set; Committed = pagefile (phys + swap)")

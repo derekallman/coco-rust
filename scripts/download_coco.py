@@ -22,13 +22,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-ANNOTATIONS_URL = (
-    "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
-)
-NEEDED_ANNOTATION_FILES = {
-    "annotations/instances_val2017.json",
-    "annotations/person_keypoints_val2017.json",
-}
+ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
+NEEDED_ANNOTATION_FILES = {"annotations/instances_val2017.json", "annotations/person_keypoints_val2017.json"}
 
 
 # ---------------------------------------------------------------------------
@@ -107,27 +102,26 @@ def _gen_bbox(gt: dict) -> list:
             max(1, bbox[3] + random.gauss(0, 3)),
         ]
         score = min(1.0, max(0.01, random.gauss(0.7, 0.2)))
-        results.append({
-            "image_id": ann["image_id"],
-            "category_id": ann["category_id"],
-            "bbox": [round(x, 2) for x in noisy_bbox],
-            "score": round(score, 4),
-            "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
-        })
-        if random.random() < 0.2:
-            fp_bbox = [
-                random.uniform(0, 400),
-                random.uniform(0, 400),
-                random.uniform(10, 100),
-                random.uniform(10, 100),
-            ]
-            results.append({
+        results.append(
+            {
                 "image_id": ann["image_id"],
                 "category_id": ann["category_id"],
-                "bbox": [round(x, 2) for x in fp_bbox],
-                "score": round(random.uniform(0.01, 0.5), 4),
-                "area": round(fp_bbox[2] * fp_bbox[3], 2),
-            })
+                "bbox": [round(x, 2) for x in noisy_bbox],
+                "score": round(score, 4),
+                "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
+            }
+        )
+        if random.random() < 0.2:
+            fp_bbox = [random.uniform(0, 400), random.uniform(0, 400), random.uniform(10, 100), random.uniform(10, 100)]
+            results.append(
+                {
+                    "image_id": ann["image_id"],
+                    "category_id": ann["category_id"],
+                    "bbox": [round(x, 2) for x in fp_bbox],
+                    "score": round(random.uniform(0.01, 0.5), 4),
+                    "area": round(fp_bbox[2] * fp_bbox[3], 2),
+                }
+            )
     return results
 
 
@@ -141,10 +135,7 @@ def _gen_segm(gt: dict) -> list:
         seg = ann.get("segmentation")
         if not seg or not isinstance(seg, list):
             continue
-        noisy_seg = [
-            [round(c + random.gauss(0, 1.5), 2) for c in poly]
-            for poly in seg
-        ]
+        noisy_seg = [[round(c + random.gauss(0, 1.5), 2) for c in poly] for poly in seg]
         bbox = ann["bbox"]
         noisy_bbox = [
             bbox[0] + random.gauss(0, 2),
@@ -153,34 +144,42 @@ def _gen_segm(gt: dict) -> list:
             max(1, bbox[3] + random.gauss(0, 3)),
         ]
         score = min(1.0, max(0.01, random.gauss(0.7, 0.2)))
-        results.append({
-            "image_id": ann["image_id"],
-            "category_id": ann["category_id"],
-            "segmentation": noisy_seg,
-            "bbox": [round(x, 2) for x in noisy_bbox],
-            "score": round(score, 4),
-            "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
-        })
+        results.append(
+            {
+                "image_id": ann["image_id"],
+                "category_id": ann["category_id"],
+                "segmentation": noisy_seg,
+                "bbox": [round(x, 2) for x in noisy_bbox],
+                "score": round(score, 4),
+                "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
+            }
+        )
         if random.random() < 0.2:
             img_w, img_h = img_dims.get(ann["image_id"], (640, 480))
             cx = random.uniform(50, img_w - 50)
             cy = random.uniform(50, img_h - 50)
             size = random.uniform(10, 50)
             fp_poly = [
-                round(cx - size + random.gauss(0, 5), 2), round(cy - size + random.gauss(0, 5), 2),
-                round(cx + size + random.gauss(0, 5), 2), round(cy - size + random.gauss(0, 5), 2),
-                round(cx + size + random.gauss(0, 5), 2), round(cy + size + random.gauss(0, 5), 2),
-                round(cx - size + random.gauss(0, 5), 2), round(cy + size + random.gauss(0, 5), 2),
+                round(cx - size + random.gauss(0, 5), 2),
+                round(cy - size + random.gauss(0, 5), 2),
+                round(cx + size + random.gauss(0, 5), 2),
+                round(cy - size + random.gauss(0, 5), 2),
+                round(cx + size + random.gauss(0, 5), 2),
+                round(cy + size + random.gauss(0, 5), 2),
+                round(cx - size + random.gauss(0, 5), 2),
+                round(cy + size + random.gauss(0, 5), 2),
             ]
             fp_bbox = [round(cx - size, 2), round(cy - size, 2), round(2 * size, 2), round(2 * size, 2)]
-            results.append({
-                "image_id": ann["image_id"],
-                "category_id": ann["category_id"],
-                "segmentation": [fp_poly],
-                "bbox": fp_bbox,
-                "score": round(random.uniform(0.01, 0.5), 4),
-                "area": round(4 * size * size, 2),
-            })
+            results.append(
+                {
+                    "image_id": ann["image_id"],
+                    "category_id": ann["category_id"],
+                    "segmentation": [fp_poly],
+                    "bbox": fp_bbox,
+                    "score": round(random.uniform(0.01, 0.5), 4),
+                    "area": round(4 * size * size, 2),
+                }
+            )
     return results
 
 
@@ -209,27 +208,35 @@ def _gen_kpt(gt: dict) -> list:
             max(1, bbox[3] + random.gauss(0, 3)),
         ]
         score = min(1.0, max(0.01, random.gauss(0.7, 0.2)))
-        results.append({
-            "image_id": ann["image_id"],
-            "category_id": 1,
-            "keypoints": noisy_kpts,
-            "bbox": [round(x, 2) for x in noisy_bbox],
-            "score": round(score, 4),
-            "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
-        })
+        results.append(
+            {
+                "image_id": ann["image_id"],
+                "category_id": 1,
+                "keypoints": noisy_kpts,
+                "bbox": [round(x, 2) for x in noisy_bbox],
+                "score": round(score, 4),
+                "area": round(noisy_bbox[2] * noisy_bbox[3], 2),
+            }
+        )
         if random.random() < 0.2:
             img_w, img_h = img_dims.get(ann["image_id"], (640, 480))
             cx = random.uniform(50, img_w - 50)
             cy = random.uniform(50, img_h - 50)
-            fp_kpts = [v for _ in range(17) for v in [round(cx + random.gauss(0, 30), 2), round(cy + random.gauss(0, 30), 2), 1]]
-            results.append({
-                "image_id": ann["image_id"],
-                "category_id": 1,
-                "keypoints": fp_kpts,
-                "bbox": [round(cx - 30, 2), round(cy - 50, 2), 60.0, 100.0],
-                "score": round(random.uniform(0.01, 0.5), 4),
-                "area": round(60.0 * 100.0, 2),
-            })
+            fp_kpts = [
+                v
+                for _ in range(17)
+                for v in [round(cx + random.gauss(0, 30), 2), round(cy + random.gauss(0, 30), 2), 1]
+            ]
+            results.append(
+                {
+                    "image_id": ann["image_id"],
+                    "category_id": 1,
+                    "keypoints": fp_kpts,
+                    "bbox": [round(cx - 30, 2), round(cy - 50, 2), 60.0, 100.0],
+                    "score": round(random.uniform(0.01, 0.5), 4),
+                    "area": round(60.0 * 100.0, 2),
+                }
+            )
     return results
 
 
@@ -239,7 +246,7 @@ def generate_results(data_dir: Path, force: bool) -> bool:
     tasks = [
         ("bbox", data_dir / "bbox_val2017_results.json", ann_dir / "instances_val2017.json", _gen_bbox),
         ("segm", data_dir / "segm_val2017_results.json", ann_dir / "instances_val2017.json", _gen_segm),
-        ("kpt",  data_dir / "kpt_val2017_results.json",  ann_dir / "person_keypoints_val2017.json", _gen_kpt),
+        ("kpt", data_dir / "kpt_val2017_results.json", ann_dir / "person_keypoints_val2017.json", _gen_kpt),
     ]
 
     wrote_any = False
@@ -249,7 +256,7 @@ def generate_results(data_dir: Path, force: bool) -> bool:
             continue
         if not ann_path.exists():
             print(f"  ERROR: annotation file missing: {ann_path}", file=sys.stderr)
-            print(f"         Run without --skip-download to fetch it first.", file=sys.stderr)
+            print("         Run without --skip-download to fetch it first.", file=sys.stderr)
             sys.exit(1)
         print(f"  generating {label} results from {ann_path.name}...", end=" ", flush=True)
         with open(ann_path) as f:

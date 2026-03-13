@@ -15,6 +15,7 @@ tidecv API notes (v1.0.1):
   tide.run_thresholds[key] is a list of TIDERun objects (one per threshold).
   fix_main_errors() returns ΔAP in [0, 100] scale; divide by 100 for [0,1].
 """
+
 import sys
 from pathlib import Path
 
@@ -23,7 +24,7 @@ GT_PATH = str(_DATA / "annotations/instances_val2017.json")
 DT_PATH = str(_DATA / "bbox_val2017_results.json")
 
 # --- hotcoco ---
-from hotcoco import COCO, COCOeval
+from hotcoco import COCO, COCOeval  # noqa: E402
 
 gt = COCO(GT_PATH)
 dt = gt.load_res(DT_PATH)
@@ -43,21 +44,10 @@ for k in ["Cls", "Loc", "Both", "Dupe", "Bkg", "Miss"]:
 # --- tidecv ---
 try:
     from tidecv import TIDE, datasets
-    from tidecv.errors.main_errors import (
-        ClassError,
-        BoxError,
-        DuplicateError,
-        BackgroundError,
-        OtherError,
-        MissedError,
-    )
+    from tidecv.errors.main_errors import BackgroundError, BoxError, ClassError, DuplicateError, MissedError, OtherError
 
     tide = TIDE()
-    tide.evaluate_range(
-        datasets.COCO(GT_PATH),
-        datasets.COCOResult(DT_PATH),
-        mode=TIDE.BOX,
-    )
+    tide.evaluate_range(datasets.COCO(GT_PATH), datasets.COCOResult(DT_PATH), mode=TIDE.BOX)
     tide.summarize()
 
     # Get the run at pos_thresh=0.5 (first in the list)
@@ -85,10 +75,7 @@ try:
         tc_delta[name] = val
         print(f"  {name:4s}: delta_ap={val:.4f}  count={cnt}")
 
-    tc_counts = {
-        name: len(r50.error_dict.get(err_type, []))
-        for err_type, name in err_map
-    }
+    tc_counts = {name: len(r50.error_dict.get(err_type, [])) for err_type, name in err_map}
 
     print("\n=== Comparison (hotcoco vs tidecv) ===")
     # Known architectual difference: hotcoco uses COCO per-category eval (up to
@@ -117,10 +104,7 @@ try:
         )
 
     if all_ok:
-        print(
-            "\nAll ΔAP values within tolerance "
-            "(±0.005 for Cls/Loc/Both/Dupe/Bkg; ±0.10 for Miss)."
-        )
+        print("\nAll ΔAP values within tolerance (±0.005 for Cls/Loc/Both/Dupe/Bkg; ±0.10 for Miss).")
     else:
         print("\nSome values exceed tolerance.")
 

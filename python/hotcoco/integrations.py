@@ -14,8 +14,8 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 
-from .hotcoco import COCO, COCOeval, Params
 from . import mask as mask_utils
+from .hotcoco import COCO, COCOeval, Params
 
 
 class CocoDetection:
@@ -52,9 +52,7 @@ class CocoDetection:
         try:
             from PIL import Image
         except ImportError:
-            raise ImportError(
-                "Pillow is required for CocoDetection. Install it with: pip install Pillow"
-            ) from None
+            raise ImportError("Pillow is required for CocoDetection. Install it with: pip install Pillow") from None
         img_info = self.coco.load_imgs([img_id])[0]
         path = os.path.join(self.root, img_info["file_name"])
         return Image.open(path).convert("RGB")
@@ -78,11 +76,7 @@ class CocoDetection:
         return len(self.ids)
 
     def __repr__(self):
-        return (
-            f"{self.__class__.__name__}("
-            f"root={self.root!r}, "
-            f"num_images={len(self)})"
-        )
+        return f"{self.__class__.__name__}(root={self.root!r}, num_images={len(self)})"
 
 
 class CocoEvaluator:
@@ -136,7 +130,8 @@ class CocoEvaluator:
               Boxes are in XYXY format; converted to XYWH internally.
             - ``"segm"``: ``{"masks": Tensor(N,1,H,W), "scores": Tensor(N), "labels": Tensor(N)}``
               Masks are thresholded at 0.5 and RLE-encoded internally.
-            - ``"keypoints"``: ``{"keypoints": Tensor(N,K,3), "scores": Tensor(N), "labels": Tensor(N)}``
+            - ``"keypoints"``: ``{"keypoints": Tensor(N,K,3), "scores": Tensor(N),
+              "labels": Tensor(N)}``
         """
         for iou_type in self.iou_types:
             results = _prepare_for_coco(predictions, iou_type)
@@ -156,13 +151,12 @@ class CocoEvaluator:
             return
 
         import pickle
+
         import torch
 
         for iou_type in self.iou_types:
             local_data = pickle.dumps(self.results[iou_type])
-            local_tensor = torch.tensor(
-                list(local_data), dtype=torch.uint8, device="cpu"
-            )
+            local_tensor = torch.tensor(list(local_data), dtype=torch.uint8, device="cpu")
             local_size = torch.tensor([len(local_data)], dtype=torch.long)
 
             world_size = dist.get_world_size()
@@ -173,9 +167,7 @@ class CocoEvaluator:
             # Pad to uniform size
             padded = torch.zeros(max_size, dtype=torch.uint8)
             padded[: len(local_data)] = local_tensor
-            gathered = [
-                torch.zeros(max_size, dtype=torch.uint8) for _ in range(world_size)
-            ]
+            gathered = [torch.zeros(max_size, dtype=torch.uint8) for _ in range(world_size)]
             dist.all_gather(gathered, padded)
 
             # Unpack on all ranks
@@ -265,21 +257,15 @@ def _prepare_for_coco(predictions, iou_type):
                 mask = masks[i, 0]  # (H, W)
                 binary = (mask > 0.5).astype("uint8")
                 import numpy as _np
+
                 rle = mask_utils.encode(_np.asfortranarray(binary))
                 # counts is bytes — decode for JSON serialization
                 rle_seg = {
                     "size": rle["size"],
-                    "counts": rle["counts"].decode("utf-8")
-                    if isinstance(rle["counts"], bytes)
-                    else rle["counts"],
+                    "counts": rle["counts"].decode("utf-8") if isinstance(rle["counts"], bytes) else rle["counts"],
                 }
                 coco_results.append(
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[i],
-                        "segmentation": rle_seg,
-                        "score": scores[i],
-                    }
+                    {"image_id": original_id, "category_id": labels[i], "segmentation": rle_seg, "score": scores[i]}
                 )
 
         elif iou_type == "keypoints":
@@ -289,12 +275,7 @@ def _prepare_for_coco(predictions, iou_type):
             for i, kpts in enumerate(keypoints):
                 flat = [v for point in kpts for v in point]
                 coco_results.append(
-                    {
-                        "image_id": original_id,
-                        "category_id": labels[i],
-                        "keypoints": flat,
-                        "score": scores[i],
-                    }
+                    {"image_id": original_id, "category_id": labels[i], "keypoints": flat, "score": scores[i]}
                 )
 
     return coco_results

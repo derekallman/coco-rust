@@ -11,6 +11,10 @@ test: build
 parity: build
     uv run python scripts/parity.py
 
+# Generate evaluation report PDF — just report [type=bbox|segm|kpt]
+report type="bbox": build
+    uv run python scripts/report.py --type {{type}}
+
 # Run performance benchmarks
 bench: build
     uv run python scripts/bench.py
@@ -37,3 +41,15 @@ fmt:
 # Check formatting without modifying (matches CI)
 fmt-check:
     cargo fmt --all -- --check
+
+# Format Python code
+py-fmt:
+    uv run ruff format python/ scripts/
+
+# Check Python formatting without modifying (CI-safe)
+py-fmt-check:
+    uv run ruff format --check python/ scripts/
+
+# Lint Python code
+py-lint:
+    uv run ruff check python/ scripts/
