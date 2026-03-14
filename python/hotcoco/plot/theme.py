@@ -9,10 +9,7 @@ from .core import _import_mpl, _resolve_font_family
 _THEMES: dict[str, dict] = {
     "warm-slate": {
         "series": ["#5C7080", "#C46B50", "#2B7A8C", "#C9943E", "#8A5A90", "#5B7F63", "#3A7CA5", "#B07650"],
-        "chrome": {
-            "text": "#2C2420", "label": "#4A3F38", "tick": "#7A6E64",
-            "grid": "#E8E2DA", "spine": "#D4CCC2",
-        },
+        "chrome": {"text": "#2C2420", "label": "#4A3F38", "tick": "#7A6E64", "grid": "#E8E2DA", "spine": "#D4CCC2"},
         "background": "#FAF7F4",
         "plot_bg": "#ffffff",
         "sequential": ["#ffffff", "#A8BFCA", "#5C7080", "#2B3D4A"],
@@ -20,10 +17,7 @@ _THEMES: dict[str, dict] = {
     },
     "scientific-blue": {
         "series": ["#1B4F8A", "#E84855", "#2E86AB", "#F4A261", "#457B9D", "#74C69D"],
-        "chrome": {
-            "text": "#1A2B3C", "label": "#2E3F52", "tick": "#6B7B8E",
-            "grid": "#DDE4EF", "spine": "#C0CCE0",
-        },
+        "chrome": {"text": "#1A2B3C", "label": "#2E3F52", "tick": "#6B7B8E", "grid": "#DDE4EF", "spine": "#C0CCE0"},
         "background": "#F2F5F9",
         "plot_bg": "#ffffff",
         "sequential": ["#ffffff", "#2E86AB", "#1B4F8A", "#0D2240"],
@@ -31,10 +25,7 @@ _THEMES: dict[str, dict] = {
     },
     "ember": {
         "series": ["#BF4E30", "#F2C14E", "#D4915E", "#2D3A3A", "#6B4C3B", "#E8D5B0"],
-        "chrome": {
-            "text": "#2D3A3A", "label": "#4A3520", "tick": "#8B7355",
-            "grid": "#E6D9C5", "spine": "#D4C4A8",
-        },
+        "chrome": {"text": "#2D3A3A", "label": "#4A3520", "tick": "#8B7355", "grid": "#E6D9C5", "spine": "#D4C4A8"},
         "background": "#F5EFE6",
         "plot_bg": "#FFFDF8",
         "sequential": ["#ffffff", "#D4915E", "#BF4E30", "#6B2210"],
@@ -52,9 +43,8 @@ def _get_theme(name: str) -> dict:
 
 
 def _ensure_cmap(theme: dict) -> None:
-    from matplotlib.colors import LinearSegmentedColormap
-
     import matplotlib
+    from matplotlib.colors import LinearSegmentedColormap
 
     cmap_name = theme["cmap"]
     if cmap_name not in _CMAPS_REGISTERED:

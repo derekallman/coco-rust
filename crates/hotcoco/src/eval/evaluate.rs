@@ -294,7 +294,10 @@ impl COCOeval {
         let mut gt_matches = vec![vec![0u64; g]; num_iou_thrs];
         let mut dt_matched = vec![vec![false; d]; num_iou_thrs];
         let mut gt_matched = vec![vec![false; g]; num_iou_thrs];
-        let mut dt_ignore_flags = vec![vec![false; d]; num_iou_thrs];
+        // Initialize from dt_area_ignore so unmatched DTs have the correct ignore status
+        // even when there are no GT annotations (iou_matrix is None).
+        let mut dt_ignore_flags: Vec<Vec<bool>> =
+            (0..num_iou_thrs).map(|_| dt_area_ignore.clone()).collect();
 
         if let Some(iou_mat) = iou_matrix {
             // Build a flat D×G IoU matrix in row-major order (one allocation).
@@ -361,10 +364,8 @@ impl COCOeval {
 
                         // DT is ignored if matched to ignored GT
                         dt_ignore_flags[t_idx][di] = gt_ignore_sorted[gi];
-                    } else {
-                        // Unmatched DT: ignored if area out of range
-                        dt_ignore_flags[t_idx][di] = dt_area_ignore[di];
                     }
+                    // Unmatched: dt_ignore_flags[t_idx][di] already set from dt_area_ignore
                 }
             }
         }

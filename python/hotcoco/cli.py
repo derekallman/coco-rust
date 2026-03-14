@@ -349,14 +349,18 @@ def main():
         metavar="THR",
         help="minimum IoU with any GT for Loc/Both/Bkg distinction in TIDE (default: 0.1)",
     )
-    eval_parser.add_argument("--lvis", action="store_true", help="use LVIS-style evaluation (max 300 dets, freq-group AP)")
+    eval_parser.add_argument(
+        "--lvis", action="store_true", help="use LVIS-style evaluation (max 300 dets, freq-group AP)"
+    )
     eval_parser.add_argument(
         "--report",
         metavar="report.pdf",
         default=None,
         help="save a PDF evaluation report to this path (requires hotcoco[plot])",
     )
-    eval_parser.add_argument("--title", default="COCO Evaluation Report", help="report title (default: 'COCO Evaluation Report')")
+    eval_parser.add_argument(
+        "--title", default="COCO Evaluation Report", help="report title (default: 'COCO Evaluation Report')"
+    )
 
     stats_parser = subparsers.add_parser("stats", help="print dataset health-check statistics")
     stats_parser.add_argument("annotation_file", help="path to COCO annotation JSON file")

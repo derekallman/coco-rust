@@ -86,11 +86,7 @@ def _annotate_bars(ax, bars, values, *, fmt: str = ".3f", fontsize: float = 9):
     for bar, val in zip(bars, values):
         text = f"{val:{fmt}}" if isinstance(val, float) else str(val)
         ax.text(
-            bar.get_width() + max_val * 0.01,
-            bar.get_y() + bar.get_height() / 2,
-            text,
-            va="center",
-            fontsize=fontsize,
+            bar.get_width() + max_val * 0.01, bar.get_y() + bar.get_height() / 2, text, va="center", fontsize=fontsize
         )
 
 
@@ -135,5 +131,6 @@ def _annotate_f1_peak(ax, recall_pts, prec, line):
     best = int(np.nanargmax(f1))
     if prec[best] > 0:
         ax.plot(recall_pts[best], prec[best], "o", color=color, markersize=5, zorder=5)
-        ax.annotate(f"F1={f1[best]:.2f}", (recall_pts[best], prec[best]),
-                    textcoords="offset points", xytext=(5, 5), fontsize=8)
+        ax.annotate(
+            f"F1={f1[best]:.2f}", (recall_pts[best], prec[best]), textcoords="offset points", xytext=(5, 5), fontsize=8
+        )

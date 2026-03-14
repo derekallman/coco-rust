@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `evaluate_img_static` (eval/evaluate.rs): detection-side area-ignore flags were not applied when a (image, category) pair had detections but no GT annotations — `dt_ignore_flags` was initialized to all-`false` and only populated inside the `if let Some(iou_mat)` branch, so DTs with area outside the area range were silently treated as false positives instead of being ignored; fixed by initializing `dt_ignore_flags` from `dt_area_ignore` unconditionally; affected APm/APl/APs for images with zero GT for a given category
 - `docs/benchmarks.md` feature comparison table: four inaccurate cells corrected — pycocotools Installation changed from "Requires C compiler" to "Prebuilt wheels available (Python 3.9+)"; pycocotools Python versions changed from "3.7+" to "3.9+"; faster-coco-eval License changed from "BSD" to "Apache 2.0"; faster-coco-eval PyTorch changed from "No" to "Yes — TorchVision compatible"
 - `docs/guide/results.md` per-category AP Python example: was indexing `ev.stats[0]` (the scalar overall AP) for every category in the loop, printing the same number for every class; fixed to index the precision array by category (`precision[:, :, i, 0, 2]`); promoted `get_results(per_class=True)` as the recommended approach
 - `docs/guide/datasets.md` area range comment: `area_rng=[1024.0, 9216.0]` covers medium objects only (32²–96² px²), not "medium-to-large"

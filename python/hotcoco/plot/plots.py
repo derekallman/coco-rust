@@ -62,9 +62,7 @@ def pr_curve_iou_sweep(
     precision, all_iou_thrs, _, a_idx, m_idx, recall_pts = _resolve_pr_params(coco_eval, area_rng, max_det)
 
     t_indices = (
-        list(range(len(all_iou_thrs)))
-        if iou_thrs is None
-        else [i for i, t in enumerate(all_iou_thrs) if t in iou_thrs]
+        list(range(len(all_iou_thrs))) if iou_thrs is None else [i for i, t in enumerate(all_iou_thrs) if t in iou_thrs]
     )
 
     with mpl.rc_context(_build_rc(theme, paper_mode)):
@@ -221,23 +219,61 @@ def pr_curve_top_n(
     return _save_and_return(fig, ax, save_path)
 
 
-def pr_curve(coco_eval, *, iou_thrs=None, cat_id=None, cat_ids=None, iou_thr=None, top_n=10,
-             area_rng="all", max_det=None, theme="warm-slate", paper_mode=False, ax=None, save_path=None):
+def pr_curve(
+    coco_eval,
+    *,
+    iou_thrs=None,
+    cat_id=None,
+    cat_ids=None,
+    iou_thr=None,
+    top_n=10,
+    area_rng="all",
+    max_det=None,
+    theme="warm-slate",
+    paper_mode=False,
+    ax=None,
+    save_path=None,
+):
     """Dispatch to the appropriate named function.
 
     Prefer calling directly: ``pr_curve_iou_sweep``, ``pr_curve_by_category``,
     or ``pr_curve_top_n``.
     """
     if cat_id is not None:
-        return pr_curve_by_category(coco_eval, cat_id, iou_thr=iou_thr or 0.5,
-                                    area_rng=area_rng, max_det=max_det, theme=theme, paper_mode=paper_mode,
-                                    ax=ax, save_path=save_path)
+        return pr_curve_by_category(
+            coco_eval,
+            cat_id,
+            iou_thr=iou_thr or 0.5,
+            area_rng=area_rng,
+            max_det=max_det,
+            theme=theme,
+            paper_mode=paper_mode,
+            ax=ax,
+            save_path=save_path,
+        )
     if cat_ids is not None or iou_thr is not None:
-        return pr_curve_top_n(coco_eval, cat_ids=cat_ids, top_n=top_n, iou_thr=iou_thr or 0.5,
-                              area_rng=area_rng, max_det=max_det, theme=theme, paper_mode=paper_mode,
-                              ax=ax, save_path=save_path)
-    return pr_curve_iou_sweep(coco_eval, iou_thrs=iou_thrs, area_rng=area_rng,
-                              max_det=max_det, theme=theme, paper_mode=paper_mode, ax=ax, save_path=save_path)
+        return pr_curve_top_n(
+            coco_eval,
+            cat_ids=cat_ids,
+            top_n=top_n,
+            iou_thr=iou_thr or 0.5,
+            area_rng=area_rng,
+            max_det=max_det,
+            theme=theme,
+            paper_mode=paper_mode,
+            ax=ax,
+            save_path=save_path,
+        )
+    return pr_curve_iou_sweep(
+        coco_eval,
+        iou_thrs=iou_thrs,
+        area_rng=area_rng,
+        max_det=max_det,
+        theme=theme,
+        paper_mode=paper_mode,
+        ax=ax,
+        save_path=save_path,
+    )
 
 
 def confusion_matrix(
@@ -377,8 +413,13 @@ def confusion_matrix(
 
 
 def top_confusions(
-    cm_dict: dict[str, Any], *, top_n: int = 20, theme: str = "warm-slate", paper_mode: bool = False,
-    ax=None, save_path: str | Path | None = None
+    cm_dict: dict[str, Any],
+    *,
+    top_n: int = 20,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
+    ax=None,
+    save_path: str | Path | None = None,
 ) -> tuple:
     """Plot the top N most common misclassifications as horizontal bars.
 
@@ -526,8 +567,12 @@ def per_category_ap(
 
 
 def tide_errors(
-    tide_dict: dict[str, Any], *, theme: str = "warm-slate", paper_mode: bool = False,
-    ax=None, save_path: str | Path | None = None
+    tide_dict: dict[str, Any],
+    *,
+    theme: str = "warm-slate",
+    paper_mode: bool = False,
+    ax=None,
+    save_path: str | Path | None = None,
 ) -> tuple:
     """Plot TIDE error breakdown as horizontal bars.
 
