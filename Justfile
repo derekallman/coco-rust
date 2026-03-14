@@ -30,6 +30,11 @@ download-o365:
 # Download everything needed for all benchmarks
 download-all: download-coco download-o365
 
+# Preview docs locally (installs zensical via uv tool if needed)
+docs:
+    uv tool install zensical --quiet
+    zensical serve -o
+
 # Lint (warnings are errors, matches CI)
 lint:
     cargo clippy --workspace --all-targets -- -D warnings

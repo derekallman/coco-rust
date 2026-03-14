@@ -3,8 +3,7 @@
 hotcoco command-line interface.
 
 Usage:
-    coco eval --gt <gt.json> --dt <dt.json> [--iou-type bbox|segm|keypoints] [--tide]
-    coco report --gt <gt.json> --dt <dt.json> -o <report.pdf> [--iou-type ...] [--lvis]
+    coco eval --gt <gt.json> --dt <dt.json> [--iou-type bbox|segm|keypoints] [--lvis] [--tide] [--report out.pdf]
     coco stats <annotation_file>
     coco filter <file> -o <output> [options]
     coco merge <file1> <file2> ... -o <output>
@@ -187,7 +186,7 @@ def cmd_eval(args):
         print(f"error loading detections: {e}", file=sys.stderr)
         sys.exit(1)
 
-    ev = COCOeval(gt, dt, args.iou_type)
+    ev = COCOeval(gt, dt, args.iou_type, lvis_style=args.lvis)
 
     if args.img_ids:
         ev.params.imgIds = [int(x) for x in args.img_ids.split(",")]
@@ -203,6 +202,20 @@ def cmd_eval(args):
     if args.tide:
         te = ev.tide_errors(pos_thr=args.tide_pos_thr, bg_thr=args.tide_bg_thr)
         _print_tide(te)
+
+    if args.report:
+        try:
+            from hotcoco.plot import report
+        except ImportError as e:
+            print(f"error: {e}", file=sys.stderr)
+            print("hint: install plot dependencies with:  pip install hotcoco[plot]", file=sys.stderr)
+            sys.exit(1)
+        try:
+            report(ev, save_path=args.report, gt_path=args.gt, dt_path=args.dt, title=args.title)
+        except Exception as e:
+            print(f"error generating report: {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"report saved to {args.report}")
 
 
 def _print_tide(te):
@@ -222,41 +235,6 @@ def _print_tide(te):
     print(f"  {'─' * 6}  {'─' * 7}  {'─' * 7}")
     print(f"  {'FP':<6}  {delta.get('FP', 0.0):>7.4f}")
     print(f"  {'FN':<6}  {delta.get('FN', 0.0):>7.4f}")
-
-
-def cmd_report(args):
-    try:
-        from hotcoco import COCO, COCOeval
-        from hotcoco.plot import report
-    except ImportError as e:
-        print(f"error: {e}", file=sys.stderr)
-        print("hint: install plot dependencies with:  pip install hotcoco[plot]", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        gt = COCO(args.gt)
-    except Exception as e:
-        print(f"error loading ground truth: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    try:
-        dt = gt.load_res(args.dt)
-    except Exception as e:
-        print(f"error loading detections: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    ev = COCOeval(gt, dt, args.iou_type, lvis_style=args.lvis)
-    ev.evaluate()
-    ev.accumulate()
-    ev.summarize()
-
-    try:
-        report(ev, save_path=args.output, gt_path=args.gt, dt_path=args.dt, title=args.title)
-    except Exception as e:
-        print(f"error generating report: {e}", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"report saved to {args.output}")
 
 
 def cmd_convert(args):
@@ -371,6 +349,14 @@ def main():
         metavar="THR",
         help="minimum IoU with any GT for Loc/Both/Bkg distinction in TIDE (default: 0.1)",
     )
+    eval_parser.add_argument("--lvis", action="store_true", help="use LVIS-style evaluation (max 300 dets, freq-group AP)")
+    eval_parser.add_argument(
+        "--report",
+        metavar="report.pdf",
+        default=None,
+        help="save a PDF evaluation report to this path (requires hotcoco[plot])",
+    )
+    eval_parser.add_argument("--title", default="COCO Evaluation Report", help="report title (default: 'COCO Evaluation Report')")
 
     stats_parser = subparsers.add_parser("stats", help="print dataset health-check statistics")
     stats_parser.add_argument("annotation_file", help="path to COCO annotation JSON file")
@@ -414,20 +400,6 @@ def main():
     sample_parser.add_argument("--frac", type=float, default=None, help="fraction of images to sample")
     sample_parser.add_argument("--seed", type=int, default=42, help="random seed (default 42)")
 
-    report_parser = subparsers.add_parser("report", help="run evaluation and save a PDF report")
-    report_parser.add_argument("--gt", required=True, help="path to ground truth annotations JSON")
-    report_parser.add_argument("--dt", required=True, help="path to detection results JSON")
-    report_parser.add_argument("-o", "--output", required=True, metavar="report.pdf", help="output PDF path")
-    report_parser.add_argument(
-        "--iou-type",
-        dest="iou_type",
-        default="bbox",
-        choices=["bbox", "segm", "keypoints"],
-        help="evaluation type (default: bbox)",
-    )
-    report_parser.add_argument("--lvis", action="store_true", help="use LVIS-style evaluation (max 300 dets, freq-group AP)")
-    report_parser.add_argument("--title", default="COCO Evaluation Report", help="report title (default: 'COCO Evaluation Report')")
-
     convert_parser = subparsers.add_parser("convert", help="convert between annotation formats (COCO ↔ YOLO)")
     convert_parser.add_argument(
         "--from", dest="from_fmt", required=True, choices=["coco", "yolo"], help="source format"
@@ -467,8 +439,6 @@ def main():
         cmd_split(args)
     elif args.command == "sample":
         cmd_sample(args)
-    elif args.command == "report":
-        cmd_report(args)
     elif args.command == "convert":
         cmd_convert(args)
 

@@ -43,7 +43,7 @@ for each:
 Or from the CLI (requires `pip install hotcoco[plot]`):
 
 ```bash
-coco report --gt instances_val2017.json --dt bbox_results.json -o report.pdf
+coco eval --gt instances_val2017.json --dt bbox_results.json --report report.pdf
 ```
 
 ---
