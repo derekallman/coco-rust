@@ -9,7 +9,7 @@ Fast enough for every epoch, lean enough for every dataset. A drop-in replacemen
 
 Available as a **Python package**, **CLI tool**, and **Rust library**. Pure Rust — no Cython, no C compiler, no Microsoft Build Tools. Prebuilt wheels for Linux, macOS, and Windows.
 
-Beyond raw speed, hotcoco ships a diagnostic toolkit that pycocotools and faster-coco-eval don't have: TIDE error breakdown, cross-category confusion matrix, per-category AP, F-scores, and publication-quality plots with a one-call PDF report. Same pip install, no extra config.
+Beyond raw speed, hotcoco ships a diagnostic toolkit that pycocotools and faster-coco-eval don't have: TIDE error breakdown, cross-category confusion matrix, per-category AP, F-scores, sliced evaluation, dataset healthcheck, and publication-quality plots with a one-call PDF report. Same pip install, no extra config.
 
 **[Documentation](https://derekallman.github.io/hotcoco/)** | **[Changelog](CHANGELOG.md)** | **[Roadmap](ROADMAP.md)**
 
@@ -61,10 +61,12 @@ ev.run()
 - **Confusion matrix** — cross-category matching with per-class breakdowns. See [confusion matrix](https://derekallman.github.io/hotcoco/guide/confusion-matrix/).
 - **F-scores** — F-beta averaging over precision/recall curves, analogous to mAP. See [F-scores](https://derekallman.github.io/hotcoco/guide/f-scores/).
 - **Plotting** — publication-quality PR curves, per-category AP, confusion matrices, and TIDE error breakdowns. Three built-in themes (`warm-slate`, `scientific-blue`, `ember`) with `paper_mode` for LaTeX/PowerPoint embedding. `report()` generates a single-page PDF summary. `pip install hotcoco[plot]`. See [plotting](https://derekallman.github.io/hotcoco/guide/plotting/).
+- **Sliced evaluation** — re-accumulate metrics for named image subsets (indoor/outdoor, day/night) without recomputing IoU. See [sliced evaluation](https://derekallman.github.io/hotcoco/guide/evaluation/#sliced-evaluation).
+- **Dataset healthcheck** — 4-layer validation (structural, quality, distribution, GT/DT compatibility) catches duplicate IDs, degenerate bboxes, category imbalance, and more. See [healthcheck](https://derekallman.github.io/hotcoco/guide/datasets/#healthcheck).
 - **Format conversion** — COCO ↔ YOLO in either direction, from Python or the CLI. See [format conversion](https://derekallman.github.io/hotcoco/guide/conversion/).
 - **PyTorch integrations** — `CocoDetection` and `CocoEvaluator` drop-in replacements for torchvision's detection classes; no torchvision or pycocotools dependency required. See [PyTorch integration](https://derekallman.github.io/hotcoco/integrations/).
 - **Experiment tracker integration** — `get_results(prefix="val/bbox", per_class=True)` returns a flat dict ready for W&B, MLflow, or any logger. See [logging metrics](https://derekallman.github.io/hotcoco/guide/logging/).
-- **Python CLI** (`coco`) — included with `pip install hotcoco`; `eval`, `stats`, `filter`, `merge`, `split`, `sample`, `convert`, and `report` subcommands. See [CLI reference](https://derekallman.github.io/hotcoco/cli/).
+- **Python CLI** (`coco`) — included with `pip install hotcoco`; `eval`, `healthcheck`, `stats`, `filter`, `merge`, `split`, `sample`, and `convert` subcommands. See [CLI reference](https://derekallman.github.io/hotcoco/cli/).
 - **Rust CLI** (`coco-eval`) — lightweight eval-only binary; `cargo install hotcoco-cli`. See [CLI reference](https://derekallman.github.io/hotcoco/cli/).
 - **Rust library** — use hotcoco directly in your Rust projects via `cargo add hotcoco`. See [Rust API](https://docs.rs/hotcoco).
 

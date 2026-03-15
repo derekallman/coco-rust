@@ -35,6 +35,8 @@ coco eval --gt <gt.json> --dt <dt.json> [options]
 | `--tide-bg-thr` | Minimum IoU with any GT for Loc/Both/Bkg distinction | `0.1` |
 | `--report <path>` | Save a PDF evaluation report to this path (requires `hotcoco[plot]`) | off |
 | `--title` | Report title shown in the header | `COCO Evaluation Report` |
+| `--slices <path>` | JSON file with named image ID groups for sliced evaluation | off |
+| `--healthcheck` | Run dataset healthcheck before evaluation (warnings to stderr) | off |
 
 ```bash
 # Bounding box evaluation
@@ -60,6 +62,32 @@ coco eval --gt instances_val2017.json --dt bbox_results.json --report report.pdf
 
 # PDF report with custom title and LVIS-style evaluation
 coco eval --gt lvis_val.json --dt lvis_results.json --lvis --report lvis_report.pdf --title "LVIS Evaluation"
+
+# Sliced evaluation (compare metrics across image subsets)
+coco eval --gt instances_val2017.json --dt bbox_results.json --slices slices.json
+
+# Pre-flight healthcheck before evaluation
+coco eval --gt instances_val2017.json --dt bbox_results.json --healthcheck
+```
+
+### `coco healthcheck`
+
+Validate a dataset for structural errors, quality warnings, and distribution issues.
+
+```bash
+coco healthcheck <annotation_file> [--dt <detections.json>]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--dt <path>` | Detection results JSON — enables GT/DT compatibility checks |
+
+```bash
+# Dataset only
+coco healthcheck instances_val2017.json
+
+# With detections (also checks GT/DT compatibility)
+coco healthcheck instances_val2017.json --dt bbox_results.json
 ```
 
 ### `coco stats`

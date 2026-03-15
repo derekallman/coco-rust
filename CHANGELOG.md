@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `ConfusionMatrix.cat_names` / `confusion_matrix()` dict now includes `"cat_names"` — category names parallel to `cat_ids`, eliminating a manual `load_cats` lookup after computing a confusion matrix
 - `EvalResults.hotcoco_version` — records the library version that produced the results file; included in the `results()` dict and saved JSON
 - `TideErrors` now derives `Serialize` (Rust) — can be serialized directly with `serde_json`
+- Dataset healthcheck — 4-layer validation (structural, quality, distribution, GT/DT compatibility) for COCO annotation files; `coco.healthcheck()` and `coco.healthcheck(dt)` in Python, `healthcheck()` / `healthcheck_compatibility()` in Rust, `coco healthcheck` CLI subcommand
+- `--healthcheck` flag on `coco eval` — runs healthcheck before evaluation and prints errors/warnings to stderr
+- Sliced evaluation — `COCOeval.slice_by(slices)` re-accumulates metrics for named image-ID subsets (indoor/outdoor, day/night) without recomputing IoU; `--slices <json>` flag on `coco eval` CLI
 
 ### Fixed
 
@@ -54,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Summary table alignment widened from 18 to 22 characters so "Average Precision (AP)" and "Average Recall (AR)" align at the `@` sign across all rows
+- Sliced evaluation table uses fixed-width columns (14 chars) with `_overall` values aligned to the integer part of slice metric values for vertical readability
+- Healthcheck imbalance label now shows actual category names and counts (e.g., `person: 11,004 / toaster: 9`) instead of a bare ratio
+- `accumulate_impl` and `summarize_impl` extracted as `pub(super)` pure functions; `summarize_impl` now accepts `&[MetricDef]` to avoid redundant `build_metric_defs` calls across `summarize()`, `slice_by()`, and `metric_keys()`
 - `docs/index.md` feature card updated from "Just pip install / No Cython, no compiler" to "More than a metric / TIDE error breakdown, confusion matrix, per-category AP, and publication-quality plots" — installation ease is no longer a unique differentiator since pycocotools now ships prebuilt wheels; analysis toolkit is the clearer differentiator
 - `README.md` opening expanded with a paragraph calling out the diagnostic toolkit (TIDE error breakdown, confusion matrix, per-category AP, F-scores, publication-quality plots with PDF report) as features pycocotools and faster-coco-eval don't have
 - Consolidated repo layout: single root `pyproject.toml` (maturin `manifest-path` pattern); Python package source moved from `crates/hotcoco-pyo3/python/` to root `python/`; all scripts moved from `crates/hotcoco-pyo3/data/` to root `scripts/`

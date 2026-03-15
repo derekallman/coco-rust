@@ -456,6 +456,48 @@ F-scores complement `get_results()` when you care about a specific operating poi
 
 See [`f_scores`](../api/cocoeval.md#f_scores) in the API reference for full parameter details.
 
+## Sliced evaluation
+
+`slice_by()` re-computes all summary metrics for named subsets of images — without re-running IoU computation. This is useful for comparing model performance across data splits (e.g., indoor vs outdoor, day vs night, small images vs large images).
+
+```python
+ev = COCOeval(coco_gt, coco_dt, "bbox")
+ev.evaluate()
+
+# Define slices as {name: [img_ids]}
+slices = {
+    "indoor": [42, 139, 203, ...],
+    "outdoor": [78, 412, 901, ...],
+}
+
+results = ev.slice_by(slices)
+```
+
+Each slice in `results` contains the full set of summary metrics plus a delta vs the overall baseline:
+
+```python
+for name, sr in results.items():
+    if name == "_overall":
+        continue
+    print(f"{name}: AP={sr['AP']:.3f} (Δ{sr['delta']['AP']:+.3f})")
+```
+
+You can also pass a callable instead of a dict — it receives each image dict and returns a slice name (or `None` to skip):
+
+```python
+results = ev.slice_by(lambda img: "large" if img["width"] > 1000 else "small")
+```
+
+### From the CLI
+
+Pass `--slices <path>` to `coco eval` with a JSON file mapping slice names to image ID lists:
+
+```bash
+coco eval --gt annotations.json --dt detections.json --slices slices.json
+```
+
+---
+
 ## Saving results to JSON
 
 `results()` and `save_results()` serialize the full evaluation output — parameters, summary metrics, and optionally per-category AP — to a JSON dict or file. Both require `summarize()` (or `run()`) first.

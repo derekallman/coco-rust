@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::params::{IouType, Params};
 
 use super::results::{EvalParams, EvalResults};
-use super::types::{AccumulatedEval, FreqGroup};
+use super::types::{AccumulatedEval, FreqGroup, FreqGroups};
 use super::COCOeval;
 
 /// Definition of a single summary metric (one row in the COCO output table).
@@ -318,6 +318,158 @@ pub(super) fn metrics_lvis(max_d: usize) -> Vec<MetricDef> {
     ]
 }
 
+/// Per-category mean AP as a free function (for use by `summarize_impl` and `slice_by`).
+pub(super) fn per_cat_ap_static(eval: &AccumulatedEval, params: &Params) -> Vec<f64> {
+    let a_idx = params.area_range_idx("all").unwrap_or(0);
+    let m_idx = eval.shape.m - 1;
+    (0..eval.shape.k)
+        .map(|k_idx| {
+            let mut sum = 0.0;
+            let mut count = 0_usize;
+            for t_idx in 0..eval.shape.t {
+                for r_idx in 0..eval.shape.r {
+                    let idx = eval.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
+                    let v = eval.precision[idx];
+                    if v >= 0.0 {
+                        sum += v;
+                        count += 1;
+                    }
+                }
+            }
+            if count == 0 {
+                -1.0
+            } else {
+                sum / count as f64
+            }
+        })
+        .collect()
+}
+
+/// Resolve max_dets into (default, small, medium) triple.
+fn resolve_max_dets(params: &Params) -> (usize, usize, usize) {
+    let default = *params.max_dets.last().unwrap_or(&100);
+    let small = if params.max_dets.len() >= 3 {
+        params.max_dets[0]
+    } else {
+        default
+    };
+    let med = if params.max_dets.len() >= 3 {
+        params.max_dets[1]
+    } else {
+        default
+    };
+    (default, small, med)
+}
+
+/// Build the MetricDef vec for the current evaluation mode.
+pub(super) fn build_metric_defs(params: &Params, is_lvis: bool) -> Vec<MetricDef> {
+    let (max_d, max_d_s, max_d_m) = resolve_max_dets(params);
+    if is_lvis {
+        metrics_lvis(max_d)
+    } else if params.iou_type == IouType::Keypoints {
+        metrics_kp(max_d)
+    } else {
+        metrics_bbox_segm(max_d, max_d_s, max_d_m)
+    }
+}
+
+/// Pure computation of summary statistics from accumulated eval data.
+///
+/// Returns one `f64` per metric in the same order as the MetricDef vec for the
+/// current evaluation mode.
+pub(super) fn summarize_impl(
+    eval: &AccumulatedEval,
+    params: &Params,
+    is_lvis: bool,
+    freq_groups: &FreqGroups,
+    metrics: &[MetricDef],
+) -> Vec<f64> {
+    let summarize_stat = |ap: bool, iou_thr: Option<f64>, area_lbl: &str, max_det: usize| -> f64 {
+        let a_idx = params.area_range_idx(area_lbl).unwrap_or(0);
+        let m_idx = params
+            .max_dets
+            .iter()
+            .position(|&d| d == max_det)
+            .unwrap_or(0);
+
+        let t_indices: Vec<usize> = if let Some(thr) = iou_thr {
+            params
+                .iou_thrs
+                .iter()
+                .enumerate()
+                .filter(|(_, &t)| (t - thr).abs() < 1e-9)
+                .map(|(i, _)| i)
+                .collect()
+        } else {
+            (0..eval.shape.t).collect()
+        };
+
+        let mut vals = Vec::new();
+        for &t_idx in &t_indices {
+            for k_idx in 0..eval.shape.k {
+                if ap {
+                    for r_idx in 0..eval.shape.r {
+                        let idx = eval.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
+                        let v = eval.precision[idx];
+                        if v >= 0.0 {
+                            vals.push(v);
+                        }
+                    }
+                } else {
+                    let idx = eval.recall_idx(t_idx, k_idx, a_idx, m_idx);
+                    let v = eval.recall[idx];
+                    if v >= 0.0 {
+                        vals.push(v);
+                    }
+                }
+            }
+        }
+
+        if vals.is_empty() {
+            -1.0
+        } else {
+            vals.iter().sum::<f64>() / vals.len() as f64
+        }
+    };
+
+    let per_cat_ap = if is_lvis {
+        Some(per_cat_ap_static(eval, params))
+    } else {
+        None
+    };
+
+    let freq_group_ap = |indices: &[usize]| -> f64 {
+        let per_cat = per_cat_ap.as_deref().unwrap_or(&[]);
+        let valid: Vec<f64> = indices
+            .iter()
+            .filter_map(|&k| {
+                let v = per_cat[k];
+                if v >= 0.0 {
+                    Some(v)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if valid.is_empty() {
+            -1.0
+        } else {
+            valid.iter().sum::<f64>() / valid.len() as f64
+        }
+    };
+
+    metrics
+        .iter()
+        .map(|m| {
+            if let Some(fg) = m.freq_group {
+                freq_group_ap(freq_groups.get(fg))
+            } else {
+                summarize_stat(m.ap, m.iou_thr, m.area_lbl, m.max_det)
+            }
+        })
+        .collect()
+}
+
 impl COCOeval {
     /// Print the standard 12-line COCO evaluation summary.
     pub fn summarize(&mut self) {
@@ -328,8 +480,6 @@ impl COCOeval {
                 return;
             }
         };
-
-        let is_kp = self.params.iou_type == IouType::Keypoints;
 
         // Warn if parameters differ from what the hardcoded summary display expects.
         let defaults = Params::new(self.params.iou_type);
@@ -375,116 +525,17 @@ impl COCOeval {
             eprintln!("Warning: {}", w);
         }
 
-        // Compute a single summary statistic by averaging over the relevant slice
-        // of the precision or recall array. Returns -1.0 if no valid data exists.
-        let summarize_stat =
-            |ap: bool, iou_thr: Option<f64>, area_lbl: &str, max_det: usize| -> f64 {
-                let a_idx = self.params.area_range_idx(area_lbl).unwrap_or(0);
-                let m_idx = self
-                    .params
-                    .max_dets
-                    .iter()
-                    .position(|&d| d == max_det)
-                    .unwrap_or(0);
+        // Delegate the actual computation to the free function.
+        let metrics = build_metric_defs(&self.params, self.is_lvis);
+        let stats = summarize_impl(
+            eval,
+            &self.params,
+            self.is_lvis,
+            &self.freq_groups,
+            &metrics,
+        );
 
-                let t_indices: Vec<usize> = if let Some(thr) = iou_thr {
-                    self.params
-                        .iou_thrs
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, &t)| (t - thr).abs() < 1e-9)
-                        .map(|(i, _)| i)
-                        .collect()
-                } else {
-                    (0..eval.shape.t).collect()
-                };
-
-                let mut vals = Vec::new();
-                for &t_idx in &t_indices {
-                    for k_idx in 0..eval.shape.k {
-                        if ap {
-                            for r_idx in 0..eval.shape.r {
-                                let idx = eval.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
-                                let v = eval.precision[idx];
-                                if v >= 0.0 {
-                                    vals.push(v);
-                                }
-                            }
-                        } else {
-                            let idx = eval.recall_idx(t_idx, k_idx, a_idx, m_idx);
-                            let v = eval.recall[idx];
-                            if v >= 0.0 {
-                                vals.push(v);
-                            }
-                        }
-                    }
-                }
-
-                if vals.is_empty() {
-                    -1.0
-                } else {
-                    vals.iter().sum::<f64>() / vals.len() as f64
-                }
-            };
-
-        let max_det_default = *self.params.max_dets.last().unwrap_or(&100);
-        let max_det_small = if self.params.max_dets.len() >= 3 {
-            self.params.max_dets[0]
-        } else {
-            max_det_default
-        };
-        let max_det_med = if self.params.max_dets.len() >= 3 {
-            self.params.max_dets[1]
-        } else {
-            max_det_default
-        };
-
-        // Build the per-category AP lookup for LVIS frequency-group metrics.
-        // Computed once here; used only when a MetricDef has freq_group: Some(_).
-        let per_cat_ap = if self.is_lvis {
-            Some(self.per_cat_ap(eval))
-        } else {
-            None
-        };
-
-        let freq_group_ap = |indices: &[usize]| -> f64 {
-            let per_cat = per_cat_ap.as_deref().unwrap_or(&[]);
-            let valid: Vec<f64> = indices
-                .iter()
-                .filter_map(|&k| {
-                    let v = per_cat[k];
-                    if v >= 0.0 {
-                        Some(v)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            if valid.is_empty() {
-                -1.0
-            } else {
-                valid.iter().sum::<f64>() / valid.len() as f64
-            }
-        };
-
-        let metrics = if self.is_lvis {
-            metrics_lvis(max_det_default)
-        } else if is_kp {
-            metrics_kp(max_det_default)
-        } else {
-            metrics_bbox_segm(max_det_default, max_det_small, max_det_med)
-        };
-
-        let mut stats = Vec::with_capacity(metrics.len());
-
-        for m in &metrics {
-            let val = if let Some(fg) = m.freq_group {
-                freq_group_ap(self.freq_groups.get(fg))
-            } else {
-                summarize_stat(m.ap, m.iou_thr, m.area_lbl, m.max_det)
-            };
-            stats.push(val);
-
+        for (m, &val) in metrics.iter().zip(stats.iter()) {
             let val_str = Self::format_metric(val);
 
             if self.is_lvis {
@@ -501,7 +552,7 @@ impl COCOeval {
                     None => "0.50:0.95".to_string(),
                 };
                 println!(
-                    " {:<18} @[ IoU={:<9} | area={:>6} | maxDets={:>3} ] = {}",
+                    " {:<22} @[ IoU={:<9} | area={:>6} | maxDets={:>3} ] = {}",
                     format!("{} ({})", metric_name, metric_short),
                     iou_str,
                     m.area_lbl,
@@ -533,57 +584,18 @@ impl COCOeval {
 
     /// Metric key names for the current evaluation mode, derived from the same
     /// `MetricDef` vec that drives computation in `summarize()`.
-    fn metric_keys(&self) -> Vec<&'static str> {
-        let max_det_default = *self.params.max_dets.last().unwrap_or(&100);
-        let metrics = if self.is_lvis {
-            metrics_lvis(max_det_default)
-        } else {
-            let max_det_small = if self.params.max_dets.len() >= 3 {
-                self.params.max_dets[0]
-            } else {
-                max_det_default
-            };
-            let max_det_med = if self.params.max_dets.len() >= 3 {
-                self.params.max_dets[1]
-            } else {
-                max_det_default
-            };
-            if self.params.iou_type == IouType::Keypoints {
-                metrics_kp(max_det_default)
-            } else {
-                metrics_bbox_segm(max_det_default, max_det_small, max_det_med)
-            }
-        };
-        metrics.into_iter().map(|m| m.name).collect()
+    pub(super) fn metric_keys(&self) -> Vec<&'static str> {
+        build_metric_defs(&self.params, self.is_lvis)
+            .into_iter()
+            .map(|m| m.name)
+            .collect()
     }
 
     /// Per-category mean AP (averaged over all IoU thresholds and recall thresholds,
     /// at area="all" and the last max_dets setting). Returns one value per `params.cat_ids`
     /// entry; -1.0 for categories with no valid precision data.
     pub(super) fn per_cat_ap(&self, eval: &AccumulatedEval) -> Vec<f64> {
-        let a_idx = self.area_all_idx();
-        let m_idx = eval.shape.m - 1;
-        (0..eval.shape.k)
-            .map(|k_idx| {
-                let mut sum = 0.0;
-                let mut count = 0_usize;
-                for t_idx in 0..eval.shape.t {
-                    for r_idx in 0..eval.shape.r {
-                        let idx = eval.precision_idx(t_idx, r_idx, k_idx, a_idx, m_idx);
-                        let v = eval.precision[idx];
-                        if v >= 0.0 {
-                            sum += v;
-                            count += 1;
-                        }
-                    }
-                }
-                if count == 0 {
-                    -1.0
-                } else {
-                    sum / count as f64
-                }
-            })
-            .collect()
+        per_cat_ap_static(eval, &self.params)
     }
 
     /// Run the full evaluation pipeline in one call: `evaluate` → `accumulate` → `summarize`.

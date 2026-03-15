@@ -347,6 +347,7 @@ def _draw_category_section(fig, gs_cell, cat_items, n_cols, rows_per_col, has_co
     raw_ratios = [2, 8, 4] + ([3, 3] if has_counts else [])
     col_fracs = [r / sum(raw_ratios) for r in raw_ratios]
     n_data_cols = len(col_fracs)
+    # TODO: AP scores should be left-aligned in the per-category table
     data_aligns = ["center", "left", "right"] + (["right", "right"] if has_counts else [])
     hdr_labels = ["#", "Category", "AP"] + (["ann", "img"] if has_counts else [])
 

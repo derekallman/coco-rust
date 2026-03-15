@@ -9,10 +9,12 @@ mod confusion;
 mod evaluate;
 mod iou;
 mod results;
+pub mod slice;
 mod summarize;
 mod tide;
 
 pub use results::EvalResults;
+pub use slice::{SliceResult, SlicedResults};
 pub use types::{AccumulatedEval, ConfusionMatrix, EvalImg, EvalShape, TideErrors};
 
 use std::collections::HashMap;

@@ -747,6 +747,16 @@ impl COCO {
             annotation_area: summary_stats(areas),
         }
     }
+
+    /// Run a health check on this dataset.
+    pub fn healthcheck(&self) -> crate::healthcheck::HealthReport {
+        crate::healthcheck::healthcheck(&self.dataset)
+    }
+
+    /// Run a health check including GT/DT compatibility.
+    pub fn healthcheck_compatibility(&self, dt: &COCO) -> crate::healthcheck::HealthReport {
+        crate::healthcheck::healthcheck_compatibility(&self.dataset, &dt.dataset)
+    }
 }
 
 fn summary_stats(mut values: Vec<f64>) -> SummaryStats {

@@ -3,7 +3,8 @@
 hotcoco command-line interface.
 
 Usage:
-    coco eval --gt <gt.json> --dt <dt.json> [--iou-type bbox|segm|keypoints] [--lvis] [--tide] [--report out.pdf]
+    coco eval --gt <gt.json> --dt <dt.json> [--iou-type bbox|segm|keypoints] [--lvis] [--tide] [--report out.pdf] [--slices slices.json]
+    coco healthcheck <annotation_file> [--dt <detections.json>]
     coco stats <annotation_file>
     coco filter <file> -o <output> [options]
     coco merge <file1> <file2> ... -o <output>
@@ -186,6 +187,15 @@ def cmd_eval(args):
         print(f"error loading detections: {e}", file=sys.stderr)
         sys.exit(1)
 
+    if args.healthcheck:
+        hc = gt.healthcheck(dt)
+        for f in hc["errors"]:
+            print(f" \033[91mERROR [{f['code']}]\033[0m {f['message']}", file=sys.stderr)
+        for f in hc["warnings"]:
+            print(f" \033[93mWARN  [{f['code']}]\033[0m {f['message']}", file=sys.stderr)
+        if hc["errors"] or hc["warnings"]:
+            print(file=sys.stderr)
+
     ev = COCOeval(gt, dt, args.iou_type, lvis_style=args.lvis)
 
     if args.img_ids:
@@ -196,8 +206,60 @@ def cmd_eval(args):
         ev.params.useCats = False
 
     ev.evaluate()
+
     ev.accumulate()
     ev.summarize()
+
+    if args.slices:
+        import json as json_mod
+
+        with open(args.slices) as f:
+            slices = json_mod.load(f)
+
+        results = ev.slice_by(slices)
+
+        # Pick metric names based on eval mode
+        if args.lvis:
+            key_metrics = ["AP", "AP50", "AP75", "APr", "APc", "APf"]
+        elif args.iou_type == "keypoints":
+            key_metrics = ["AP", "AP50", "AP75", "APm", "APl"]
+        else:
+            key_metrics = ["AP", "AP50", "AP75", "APs", "APm", "APl"]
+
+        # Column width matches "0.578 (+0.020)" = 14 chars
+        col_w = 14
+        header = f"  {'Slice':<20} {'N':>6}"
+        for km in key_metrics:
+            header += f"  {km:>{col_w}}"
+        print()
+        print(header)
+        print("  " + "-" * (len(header) - 2))
+
+        for name in sorted(results.keys()):
+            if name == "_overall":
+                continue
+            sr = results[name]
+            row = f"  {name:<20} {sr['num_images']:>6}"
+            for km in key_metrics:
+                val = sr.get(km, -1.0)
+                delta = sr.get("delta", {}).get(km, 0.0)
+                if val < 0:
+                    row += f"  {'n/a':>{col_w}}"
+                else:
+                    sign = "+" if delta >= 0 else ""
+                    row += f"  {val:.3f} ({sign}{delta:.3f})"
+            print(row)
+
+        ov = results["_overall"]
+        row = f"  {'_overall':<20} {ov['num_images']:>6}"
+        for km in key_metrics:
+            val = ov.get(km, -1.0)
+            if val < 0:
+                row += f"  {'n/a':>{col_w}}"
+            else:
+                # Align value under the integer part of slice rows
+                row += f"  {val:.3f}{'':>9}"
+        print(row)
 
     if args.tide:
         te = ev.tide_errors(pos_thr=args.tide_pos_thr, bg_thr=args.tide_bg_thr)
@@ -287,6 +349,52 @@ def cmd_convert(args):
         sys.exit(1)
 
 
+def cmd_healthcheck(args):
+    coco = _load_coco(args.annotation_file)
+
+    dt_coco = None
+    if args.dt:
+        try:
+            dt_coco = coco.load_res(args.dt)
+        except Exception as e:
+            print(f"error loading detections: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    report = coco.healthcheck(dt_coco)
+
+    for finding in report["errors"]:
+        print(f"\033[91mERROR [{finding['code']}]\033[0m {finding['message']}")
+        if finding["affected_ids"]:
+            ids_str = ", ".join(str(i) for i in finding["affected_ids"][:10])
+            suffix = f" ... ({len(finding['affected_ids'])} total)" if len(finding["affected_ids"]) > 10 else ""
+            print(f"       IDs: {ids_str}{suffix}")
+
+    for finding in report["warnings"]:
+        print(f"\033[93mWARN  [{finding['code']}]\033[0m {finding['message']}")
+        if finding["affected_ids"]:
+            ids_str = ", ".join(str(i) for i in finding["affected_ids"][:10])
+            suffix = f" ... ({len(finding['affected_ids'])} total)" if len(finding["affected_ids"]) > 10 else ""
+            print(f"       IDs: {ids_str}{suffix}")
+
+    s = report["summary"]
+    print()
+    print(f"  Images:        {s['num_images']:>6,}")
+    print(f"  Annotations:   {s['num_annotations']:>6,}")
+    print(f"  Categories:    {s['num_categories']:>6,}")
+    print(f"  No annotations:{s['images_without_annotations']:>6,}")
+
+    cats = s["category_counts"]
+    if len(cats) >= 2:
+        top_name, top_count = cats[0]
+        bot_name, bot_count = cats[-1]
+        print(f"  Cat imbalance: {s['imbalance_ratio']:>8.1f}x  ({top_name}: {top_count:,} / {bot_name}: {bot_count:,})")
+    else:
+        print(f"  Cat imbalance: {s['imbalance_ratio']:>8.1f}x")
+
+    if not report["errors"] and not report["warnings"]:
+        print("\n\033[92mAll checks passed.\033[0m")
+
+
 def cmd_sample(args):
     coco = _load_coco(args.annotation_file)
     n_imgs_before = len(coco.dataset["images"])
@@ -361,6 +469,18 @@ def main():
     eval_parser.add_argument(
         "--title", default="COCO Evaluation Report", help="report title (default: 'COCO Evaluation Report')"
     )
+    eval_parser.add_argument(
+        "--slices", metavar="slices.json", default=None,
+        help="path to JSON file with named image ID groups for sliced evaluation",
+    )
+    eval_parser.add_argument(
+        "--healthcheck", action="store_true",
+        help="run dataset healthcheck before evaluation (warnings printed to stderr)",
+    )
+
+    healthcheck_parser = subparsers.add_parser("healthcheck", help="validate a COCO dataset")
+    healthcheck_parser.add_argument("annotation_file", help="path to COCO annotation JSON")
+    healthcheck_parser.add_argument("--dt", help="path to detection results JSON (enables GT/DT checks)")
 
     stats_parser = subparsers.add_parser("stats", help="print dataset health-check statistics")
     stats_parser.add_argument("annotation_file", help="path to COCO annotation JSON file")
@@ -433,6 +553,8 @@ def main():
 
     if args.command == "eval":
         cmd_eval(args)
+    elif args.command == "healthcheck":
+        cmd_healthcheck(args)
     elif args.command == "stats":
         cmd_stats(args)
     elif args.command == "filter":

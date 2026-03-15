@@ -232,6 +232,53 @@ coco2.save("reconstructed.json")
 
 ---
 
+## healthcheck
+
+Validate a dataset for common issues before training or evaluation. The healthcheck
+runs four layers of checks, each catching progressively subtler problems:
+
+1. **Structural** — duplicate IDs, orphaned annotation references (errors)
+2. **Quality** — degenerate bboxes, zero-area annotations, out-of-bounds, extreme aspect ratios, near-duplicates (warnings)
+3. **Distribution** — category imbalance, low/zero-instance categories (warnings)
+4. **Compatibility** — GT/DT image/category mismatches (requires detections)
+
+```python
+from hotcoco import COCO
+
+coco = COCO("annotations.json")
+report = coco.healthcheck()
+
+for f in report["errors"]:
+    print(f"ERROR [{f['code']}] {f['message']}")
+for f in report["warnings"]:
+    print(f"WARN  [{f['code']}] {f['message']}")
+
+print(f"Images: {report['summary']['num_images']}")
+print(f"Imbalance: {report['summary']['imbalance_ratio']:.1f}x")
+```
+
+Pass detections to also run GT/DT compatibility checks:
+
+```python
+dt = coco.load_res("detections.json")
+report = coco.healthcheck(dt)
+```
+
+### From the CLI
+
+```bash
+# Dataset only
+coco healthcheck annotations.json
+
+# With detections
+coco healthcheck annotations.json --dt detections.json
+
+# As a pre-flight check before evaluation
+coco eval --gt annotations.json --dt detections.json --healthcheck
+```
+
+---
+
 ## CLI
 
 All operations are available as `coco` subcommands — no Python required

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use hotcoco::convert::{coco_to_yolo, yolo_to_coco};
 use hotcoco::params::IouType;
 use hotcoco::types::{Annotation, Category, Dataset, Image};
-use hotcoco::{COCOeval, COCO};
+use hotcoco::{healthcheck, COCOeval, COCO};
 
 fn fixtures_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
@@ -2371,4 +2371,298 @@ fn test_results_save_roundtrip() {
     let contents = std::fs::read_to_string(&path).unwrap();
     let file_parsed: serde_json::Value = serde_json::from_str(&contents).unwrap();
     assert_eq!(parsed, file_parsed);
+}
+
+#[test]
+fn test_healthcheck_structural_errors() {
+    let path = fixtures_dir().join("healthcheck_bad.json");
+    let dataset: hotcoco::Dataset =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let report = healthcheck::healthcheck(&dataset);
+
+    let codes: Vec<&str> = report.errors.iter().map(|f| f.code).collect();
+    assert!(
+        codes.contains(&"duplicate_image_id"),
+        "should detect duplicate image IDs"
+    );
+    assert!(
+        codes.contains(&"duplicate_ann_id"),
+        "should detect duplicate annotation IDs"
+    );
+    assert!(
+        codes.contains(&"orphan_image_id"),
+        "should detect orphan image_id in annotations"
+    );
+    assert!(
+        codes.contains(&"orphan_category_id"),
+        "should detect orphan category_id in annotations"
+    );
+    assert!(
+        codes.contains(&"zero_dimensions"),
+        "should detect zero height/width on images"
+    );
+}
+
+#[test]
+fn test_healthcheck_clean_dataset() {
+    let path = fixtures_dir().join("gt.json");
+    let dataset: hotcoco::Dataset =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let report = healthcheck::healthcheck(&dataset);
+
+    assert!(
+        report.errors.is_empty(),
+        "clean dataset should have no errors: {:?}",
+        report.errors
+    );
+}
+
+#[test]
+fn test_healthcheck_quality_warnings() {
+    let path = fixtures_dir().join("healthcheck_quality.json");
+    let dataset: hotcoco::Dataset =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let report = healthcheck::healthcheck(&dataset);
+
+    let codes: Vec<&str> = report.warnings.iter().map(|f| f.code).collect();
+    assert!(
+        codes.contains(&"degenerate_bbox"),
+        "should detect zero-width bbox"
+    );
+    assert!(
+        codes.contains(&"bbox_out_of_bounds"),
+        "should detect bbox extending outside image"
+    );
+    assert!(
+        codes.contains(&"extreme_aspect_ratio"),
+        "should detect extreme aspect ratio"
+    );
+    assert!(
+        codes.contains(&"near_duplicate"),
+        "should detect near-duplicate overlapping annotations"
+    );
+}
+
+#[test]
+fn test_healthcheck_summary() {
+    let path = fixtures_dir().join("gt.json");
+    let dataset: hotcoco::Dataset =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let report = healthcheck::healthcheck(&dataset);
+
+    assert_eq!(report.summary.num_images, 3);
+    assert_eq!(report.summary.num_annotations, 5);
+    assert_eq!(report.summary.num_categories, 2);
+    assert_eq!(report.summary.images_without_annotations, 0);
+    // cat: 3 annotations, dog: 2 annotations
+    assert_eq!(report.summary.category_counts[0].0, "cat");
+    assert_eq!(report.summary.category_counts[0].1, 3);
+    assert_eq!(report.summary.category_counts[1].0, "dog");
+    assert_eq!(report.summary.category_counts[1].1, 2);
+    // imbalance: 3/2 = 1.5
+    assert!((report.summary.imbalance_ratio - 1.5).abs() < 1e-9);
+}
+
+#[test]
+fn test_healthcheck_compatibility() {
+    let gt: hotcoco::Dataset = serde_json::from_str(
+        r#"{
+        "images": [
+            {"id": 1, "file_name": "a.jpg", "height": 100, "width": 100}
+        ],
+        "annotations": [
+            {"id": 1, "image_id": 1, "category_id": 1, "bbox": [10,10,20,20], "area": 400, "iscrowd": 0}
+        ],
+        "categories": [{"id": 1, "name": "cat"}]
+    }"#,
+    )
+    .unwrap();
+
+    let dt: hotcoco::Dataset = serde_json::from_str(
+        r#"{
+        "images": [
+            {"id": 1, "file_name": "a.jpg", "height": 100, "width": 100}
+        ],
+        "annotations": [
+            {"id": 1, "image_id": 999, "category_id": 1, "bbox": [10,10,20,20], "area": 400, "iscrowd": 0, "score": 0.9},
+            {"id": 2, "image_id": 1, "category_id": 999, "bbox": [10,10,20,20], "area": 400, "iscrowd": 0, "score": 0.8},
+            {"id": 3, "image_id": 1, "category_id": 1, "bbox": [10,10,20,20], "area": 400, "iscrowd": 0},
+            {"id": 4, "image_id": 1, "category_id": 1, "bbox": [10,10,20,20], "area": 400, "iscrowd": 0, "score": 1.5}
+        ],
+        "categories": [{"id": 1, "name": "cat"}]
+    }"#,
+    )
+    .unwrap();
+
+    let report = healthcheck::healthcheck_compatibility(&gt, &dt);
+
+    let codes: Vec<&str> = report
+        .errors
+        .iter()
+        .map(|f| f.code)
+        .chain(report.warnings.iter().map(|f| f.code))
+        .collect();
+    assert!(
+        codes.contains(&"dt_orphan_image_id"),
+        "should detect DT referencing unknown image ID"
+    );
+    assert!(
+        codes.contains(&"dt_orphan_category_id"),
+        "should detect DT referencing unknown category ID"
+    );
+    assert!(
+        codes.contains(&"dt_missing_score"),
+        "should detect DT missing score"
+    );
+    assert!(
+        codes.contains(&"dt_score_out_of_range"),
+        "should detect DT with score > 1.0"
+    );
+}
+
+#[test]
+fn test_accumulate_unchanged_after_refactor() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let dt_path = fixtures_dir().join("dt.json");
+    let coco_gt = COCO::new(&gt_path).unwrap();
+    let coco_dt = coco_gt.load_res(&dt_path).unwrap();
+
+    let mut ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+    ev.evaluate();
+    ev.accumulate();
+
+    let eval = ev.eval.as_ref().unwrap();
+    assert_eq!(eval.shape.t, 10);
+    assert_eq!(eval.shape.k, 2);
+    let valid_count = eval.precision.iter().filter(|&&v| v >= 0.0).count();
+    assert!(valid_count > 0, "should have valid precision values");
+    let valid_recall = eval.recall.iter().filter(|&&v| v >= 0.0).count();
+    assert!(valid_recall > 0, "should have valid recall values");
+}
+
+#[test]
+fn test_slice_by_full_dataset_matches_normal_eval() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let dt_path = fixtures_dir().join("dt.json");
+
+    // Load twice since COCO doesn't implement Clone.
+    let coco_gt1 = COCO::new(&gt_path).unwrap();
+    let coco_dt1 = coco_gt1.load_res(&dt_path).unwrap();
+    let coco_gt2 = COCO::new(&gt_path).unwrap();
+    let coco_dt2 = coco_gt2.load_res(&dt_path).unwrap();
+
+    let all_img_ids: Vec<u64> = coco_gt1.dataset.images.iter().map(|i| i.id).collect();
+
+    let mut ev = COCOeval::new(coco_gt1, coco_dt1, IouType::Bbox);
+    ev.evaluate();
+    ev.accumulate();
+    ev.summarize();
+    let normal_results = ev.get_results(None, false);
+
+    let mut ev2 = COCOeval::new(coco_gt2, coco_dt2, IouType::Bbox);
+    ev2.evaluate();
+    let sliced = ev2
+        .slice_by(
+            vec![("all_images".to_string(), all_img_ids)]
+                .into_iter()
+                .collect(),
+        )
+        .unwrap();
+
+    for (key, &val) in &sliced.overall.metrics {
+        let normal_val = normal_results.get(key).copied().unwrap();
+        assert!(
+            (val - normal_val).abs() < 1e-12,
+            "overall {} mismatch: {} vs {}",
+            key,
+            val,
+            normal_val
+        );
+    }
+
+    let all_slice = sliced
+        .slices
+        .iter()
+        .find(|s| s.name == "all_images")
+        .unwrap();
+    for (key, &val) in &all_slice.metrics {
+        let normal_val = normal_results.get(key).copied().unwrap();
+        assert!(
+            (val - normal_val).abs() < 1e-12,
+            "all_images slice {} mismatch: {} vs {}",
+            key,
+            val,
+            normal_val
+        );
+    }
+
+    for &d in all_slice.delta.values() {
+        assert!(d.abs() < 1e-12, "delta should be zero for full dataset");
+    }
+}
+
+#[test]
+fn test_slice_by_disjoint_halves() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let dt_path = fixtures_dir().join("dt.json");
+    let coco_gt = COCO::new(&gt_path).unwrap();
+    let coco_dt = coco_gt.load_res(&dt_path).unwrap();
+
+    let mut ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+    ev.evaluate();
+
+    let sliced = ev
+        .slice_by(
+            vec![
+                ("first_two".to_string(), vec![1, 2]),
+                ("last_one".to_string(), vec![3]),
+            ]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap();
+
+    assert_eq!(sliced.slices.len(), 2);
+    let first = sliced
+        .slices
+        .iter()
+        .find(|s| s.name == "first_two")
+        .unwrap();
+    let last = sliced.slices.iter().find(|s| s.name == "last_one").unwrap();
+    assert_eq!(first.num_images, 2);
+    assert_eq!(last.num_images, 1);
+
+    assert!(first.metrics.values().any(|&v| v >= 0.0));
+    assert!(last.metrics.values().any(|&v| v >= 0.0));
+}
+
+#[test]
+fn test_slice_by_reserved_name_rejected() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let dt_path = fixtures_dir().join("dt.json");
+    let coco_gt = COCO::new(&gt_path).unwrap();
+    let coco_dt = coco_gt.load_res(&dt_path).unwrap();
+
+    let mut ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+    ev.evaluate();
+
+    let result = ev.slice_by(
+        vec![("_overall".to_string(), vec![1])]
+            .into_iter()
+            .collect(),
+    );
+    assert!(result.is_err(), "_overall should be a reserved name");
+}
+
+#[test]
+fn test_slice_by_requires_evaluate() {
+    let gt_path = fixtures_dir().join("gt.json");
+    let dt_path = fixtures_dir().join("dt.json");
+    let coco_gt = COCO::new(&gt_path).unwrap();
+    let coco_dt = coco_gt.load_res(&dt_path).unwrap();
+
+    let ev = COCOeval::new(coco_gt, coco_dt, IouType::Bbox);
+
+    let result = ev.slice_by(vec![("slice".to_string(), vec![1])].into_iter().collect());
+    assert!(result.is_err(), "should error when evaluate() not called");
 }

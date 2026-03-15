@@ -254,6 +254,24 @@ impl PyCOCO {
         dataset_stats_to_py(py, &s)
     }
 
+    /// Validate this dataset for structural errors, quality warnings, and
+    /// distribution issues. If ``dt`` is provided, also checks GT/DT compatibility
+    /// (e.g., mismatched image or category IDs).
+    ///
+    /// Returns a dict with ``"errors"``, ``"warnings"``, and ``"summary"`` keys.
+    #[pyo3(signature = (dt=None))]
+    fn healthcheck(&self, py: Python<'_>, dt: Option<&PyCOCO>) -> PyResult<PyObject> {
+        let report = match dt {
+            Some(dt_coco) => self.inner.healthcheck_compatibility(&dt_coco.inner),
+            None => self.inner.healthcheck(),
+        };
+        let json_str = serde_json::to_string(&report)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let json_mod = py.import("json")?;
+        let result = json_mod.call_method1("loads", (json_str,))?;
+        Ok(result.into())
+    }
+
     /// Filter the dataset by category, image, and/or annotation area.
     ///
     /// Returns a new `COCO` with matching annotations. Images with no matching
@@ -1241,6 +1259,76 @@ Example\n\
         dict.set_item("bg_thr", te.bg_thr)?;
 
         Ok(dict.into_any().unbind())
+    }
+
+    /// Re-accumulate metrics for named image subsets without recomputing IoU.
+    ///
+    /// ``slices`` is either a dict of ``{name: [img_ids]}`` or a callable that
+    /// takes an image dict and returns a slice name (or ``None`` to skip).
+    /// Returns a dict with one entry per slice plus ``"_overall"``.
+    #[pyo3(signature = (slices))]
+    fn slice_by(&mut self, py: Python<'_>, slices: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+        use std::collections::HashMap;
+
+        // If slices is callable, group images by return value
+        let slice_map: HashMap<String, Vec<u64>> = if slices.is_callable() {
+            let gt_images = &self.inner.coco_gt.dataset.images;
+            let mut groups: HashMap<String, Vec<u64>> = HashMap::new();
+            for img in gt_images {
+                let img_dict = PyDict::new(py);
+                img_dict.set_item("id", img.id)?;
+                img_dict.set_item("file_name", &img.file_name)?;
+                img_dict.set_item("height", img.height)?;
+                img_dict.set_item("width", img.width)?;
+                let result = slices.call1((img_dict,))?;
+                let name: String = result.extract()?;
+                groups.entry(name).or_default().push(img.id);
+            }
+            groups
+        } else {
+            let dict = slices.downcast::<PyDict>().map_err(|_| {
+                pyo3::exceptions::PyTypeError::new_err("slices must be a dict or callable")
+            })?;
+            let mut map = HashMap::new();
+            for (k, v) in dict {
+                let name: String = k.extract()?;
+                let ids: Vec<u64> = v.extract().map_err(|_| {
+                    pyo3::exceptions::PyTypeError::new_err(
+                        "slice values must be sequences of image IDs",
+                    )
+                })?;
+                map.insert(name, ids);
+            }
+            map
+        };
+
+        let results = self
+            .inner
+            .slice_by(slice_map)
+            .map_err(pyo3::exceptions::PyValueError::new_err)?;
+
+        let out = PyDict::new(py);
+
+        let to_dict = |sr: &hotcoco_core::SliceResult, py: Python<'_>| -> PyResult<PyObject> {
+            let d = PyDict::new(py);
+            for (k, v) in &sr.metrics {
+                d.set_item(k, v)?;
+            }
+            d.set_item("num_images", sr.num_images)?;
+            let delta_dict = PyDict::new(py);
+            for (k, v) in &sr.delta {
+                delta_dict.set_item(k, v)?;
+            }
+            d.set_item("delta", delta_dict)?;
+            Ok(d.into_any().unbind())
+        };
+
+        out.set_item("_overall", to_dict(&results.overall, py)?)?;
+        for sr in &results.slices {
+            out.set_item(&sr.name, to_dict(sr, py)?)?;
+        }
+
+        Ok(out.into_any().unbind())
     }
 }
 
